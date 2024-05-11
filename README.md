@@ -12,7 +12,7 @@ Install `toktokenizer` from PyPI with the following
 ```
 pip install toktokenizer
 ```
-**Note:** make sure you have Rust installed to build from the sdist 
+**Note:** if you want to build from source make sure rust is installed! 
 
 The only class `toktokenizer` exposes is `BPETokenizer`. The class itself is pretty minimalistic, with all major methods being showed below:
 
@@ -38,7 +38,7 @@ decoded = bpe.decode(input_ids)
 ```
 
 # Performance 
-not the greatest but also not the worst! 
+not the greatest but also not the worst!
 
 ![alt text](performance.png)
 
