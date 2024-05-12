@@ -1,4 +1,4 @@
-import tok
+import toktokenizer as tok
 import requests
 import time
 

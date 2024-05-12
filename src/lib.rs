@@ -248,17 +248,21 @@ impl BPETokenizer {
         Ok(())
     }
 
+    // TODO: properly integrate continual training from pretrained tokenizer
     pub fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Rank> {
         assert!(vocab_size > 0);
         let mut pieces: Vec<Rank>;
 
-        if !self.encoder.is_empty() {
-            println!("pretrained tokenizer detected!");
-            pieces = self.encode(text);
-        } else {
-            let text = text.as_bytes();
-            pieces = text.iter().map(|&i| i as Rank).collect();
-        }
+        // if !self.encoder.is_empty() {
+        //     println!("pretrained tokenizer detected!");
+        //     pieces = self.encode(text);
+        // } else {
+        //     let text = text.as_bytes();
+        //     pieces = text.iter().map(|&i| i as Rank).collect();
+        // }
+
+        let text = text.as_bytes();
+        pieces = text.iter().map(|&i| i as Rank).collect();
 
         for _ in tqdm::tqdm(0..vocab_size - self.encoder.len()) {
             let mut counts: Map<(Rank, Rank), Rank> = Map::default();
