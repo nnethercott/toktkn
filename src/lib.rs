@@ -1,14 +1,17 @@
-use rustc_hash::FxHashMap;
+// use rustc_hash::FxHashMap;
 // use serde_json;
-use std::cell::RefCell;
-// use std::collections::HashMap;
+// use ahash::AHasher;
 use pyo3::prelude::*;
 use pyo3::types::PyType;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::io::Write;
 use std::{fs, str};
 
-// type Map<K, V> = HashMap<K, V>;
-type Map<K, V> = FxHashMap<K, V>;
+type Map<K, V> = HashMap<K, V>;
+// type Map<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+// type Map<K, V> = FxHashMap<K, V>;
 type Rank = u32;
 
 pub trait Tokenizer {
