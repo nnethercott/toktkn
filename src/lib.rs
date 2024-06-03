@@ -1,27 +1,25 @@
-// use rustc_hash::FxHashMap;
+use rustc_hash::FxHashMap;
 // use serde_json;
-// use ahash::AHasher;
-use pyo3::prelude::*;
-use pyo3::types::PyType;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
+use std::error::Error;
+// use std::collections::HashMap;
 use std::io::Write;
 use std::{fs, str};
 
-type Map<K, V> = HashMap<K, V>;
-// type Map<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
-// type Map<K, V> = FxHashMap<K, V>;
+// type Map<K, V> = HashMap<K, V>;
+type Map<K, V> = FxHashMap<K, V>;
 type Rank = u32;
 
 pub trait Tokenizer {
     fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Rank>;
     fn encode(&self, text: &str) -> Vec<Rank>;
     fn decode(&self, _input_ids: &[Rank]) -> String;
+    fn add_special_tokens(&mut self, tokens: &Vec<String>) -> Vec<Option<Rank>>;
 }
 
 pub trait Normalize {
-    fn normalize(&self, text: &str) -> String;
+    fn normalize(&self, text: &mut String);
 }
 
 pub struct DefaultNormalizer {}
@@ -32,16 +30,23 @@ impl DefaultNormalizer {
 }
 impl Normalize for DefaultNormalizer {
     // https://stackoverflow.com/questions/71864137/whats-the-ideal-way-to-trim-extra-spaces-from-a-string
-    fn normalize(&self, text: &str) -> String {
-        let mut new_text = String::from(text);
+    fn normalize(&self, text: &mut String) {
         let mut prev = ' ';
-        new_text.retain(|x| {
+        text.retain(|x| {
             let res = !self.is_whitespace(x as u8) || !self.is_whitespace(prev as u8);
             prev = x;
             res
         });
-        new_text
     }
+}
+
+pub struct BPETokenizer<T>
+where
+    T: Normalize,
+{
+    pub normalizer: T,
+    encoder: Map<(Rank, Rank), Rank>, //TODO: make private later
+    decoder: RefCell<Option<Map<Rank, (Rank, Rank)>>>,
 }
 
 fn _byte_pair_merge(pieces: &mut Vec<Rank>, find: (Rank, Rank), replace: Rank) {
@@ -73,46 +78,61 @@ fn _byte_pair_merge(pieces: &mut Vec<Rank>, find: (Rank, Rank), replace: Rank) {
 //     }
 // }
 
-#[pyclass]
-pub struct BPETokenizer {
-    pub normalizer: DefaultNormalizer,
-    pub encoder: Map<(Rank, Rank), Rank>, //TODO: make private later
-    pub decoder: RefCell<Option<Map<Rank, (Rank, Rank)>>>,
-}
-
-// impl Tokenizer for BPETokenizer {
-// fn decode(&self, _input_ids: &[Rank]) -> String {
-//     //need to apply merge-outs in reverse order
-//     let decoder: Map<Rank, (Rank, Rank)> = match self.decoder.borrow_mut().take() {
-//         Some(d) => d,
-//         None => self.encoder.iter().map(|(&k, &v)| (v, k)).collect(),
-//     };
-//     let mut input_ids = Vec::from(_input_ids);
-//
-//     for token in (255..256 + self.encoder.len()).rev() {
-//         let token = token as Rank;
-//
-//         let mut i = 0;
-//         while i < input_ids.len() {
-//             if input_ids[i] == token {
-//                 let pair = *decoder.get(&token).unwrap();
-//                 input_ids[i] = pair.0;
-//                 input_ids.insert(i + 1, pair.1);
-//                 i += 1;
-//             }
-//             i += 1;
+// impl BPETokenizer<DefaultNormalizer> {
+//     pub fn new() -> Self {
+//         Self {
+//             normalizer: DefaultNormalizer {},
+//             encoder: Map::default(),
+//             decoder: RefCell::new(None),
 //         }
 //     }
-//
-//     //give back decoder
-//     *self.decoder.borrow_mut() = Some(decoder);
-//
-//     let arr_u8: Vec<u8> = input_ids.iter().map(|&x| x as u8).collect();
-//     String::from(str::from_utf8(&arr_u8).unwrap())
-// }
 // }
 
-impl BPETokenizer {
+impl<T> BPETokenizer<T>
+where
+    T: Normalize,
+{
+    pub fn new(normalizer: T) -> Self {
+        Self {
+            normalizer,
+            encoder: Map::default(),
+            decoder: RefCell::new(None),
+        }
+    }
+
+    // pub fn from_pretrained(file: &str) -> Result<Self, Box<dyn Error>> {
+    //     let mut tok = Self::new(DefaultNormalizer {});
+    //     tok.load_encoder(file)?;
+    //     Ok(tok)
+    // }
+
+    pub fn preprocess(&self, text: &mut String) {
+        self.normalizer.normalize(text);
+    }
+
+    pub fn save_encoder(&self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // need to reverse key-value order since serde can't serialize tuples as map keys
+        let decoder: Map<&Rank, &(Rank, Rank)> = self.encoder.iter().map(|(k, v)| (v, k)).collect();
+
+        let serialized = serde_json::to_string(&decoder)?;
+        let mut f = fs::File::create(file)?;
+
+        f.write_all(serialized.as_bytes())?;
+
+        Ok(())
+    }
+
+    pub fn load_encoder(&mut self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let encoder_str = fs::read_to_string(file)?;
+        let _encoder: Map<Rank, (Rank, Rank)> = serde_json::from_str(&encoder_str)?;
+        let encoder: Map<(Rank, Rank), Rank> = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
+
+        self.encoder = encoder;
+        self.decoder = RefCell::new(Some(_encoder));
+
+        Ok(())
+    }
+
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Rank> {
         let mut pieces: Vec<Rank> = chunk.to_vec().iter().map(|&x| x as Rank).collect();
 
@@ -193,79 +213,58 @@ impl BPETokenizer {
     }
 }
 
-#[pymethods]
-impl BPETokenizer {
-    #[new]
-    pub fn new() -> Self {
-        Self {
-            normalizer: DefaultNormalizer {},
-            encoder: Map::default(),
-            decoder: RefCell::new(None),
+impl<T> Tokenizer for BPETokenizer<T>
+where
+    T: Normalize,
+{
+    /// Adds required merges until unique tokens exist for passed substrings
+    fn add_special_tokens(&mut self, tokens: &Vec<String>) -> Vec<Option<Rank>> {
+        let mut new_token_ids: Vec<Option<Rank>> = vec![];
+        for token in tokens {
+            //get partial encoding
+            let mut encoded = self.encode(token);
+
+            if encoded.len() == 1 {
+                new_token_ids.push(None);
+                continue;
+            }
+
+            let mut token_id = 0;
+            while encoded.len() > 1 {
+                //add necessary merges
+                let mut counts: Map<(Rank, Rank), Rank> = Map::default();
+
+                for i in 0..encoded.len() - 1 {
+                    *counts.entry((encoded[i], encoded[i + 1])).or_insert(0) += 1;
+                }
+
+                let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
+                token_id = (self.encoder.len() + 1 + 255) as Rank;
+
+                self.encoder.insert(p, token_id);
+                _byte_pair_merge(&mut encoded, p, token_id);
+            }
+            new_token_ids.push(Some(token_id));
         }
+
+        //overwrite self.decoder since we have a new encoder
+        let decoder: Map<Rank, (Rank, Rank)> = self.encoder.iter().map(|(&k, &v)| (v, k)).collect();
+        self.decoder = RefCell::new(Some(decoder));
+
+        new_token_ids
     }
 
-    #[allow(warnings)]
-    #[classmethod]
-    pub fn from_pretrained(cls: &Bound<'_, PyType>, file: &str) -> PyResult<Self> {
-        let mut tok = Self::new();
-        tok.load_encoder(file)?;
-        Ok(tok)
-    }
-
-    #[getter]
-    pub fn n_vocab(&self) -> usize {
-        self.encoder.len()
-    }
-
-    #[getter]
-    pub fn encoder(&self) -> Map<(Rank, Rank), Rank> {
-        self.encoder.clone()
-    }
-
-    pub fn preprocess(&self, text: &str) -> String {
-        self.normalizer.normalize(text)
-    }
-
-    pub fn load_encoder(&mut self, file: &str) -> PyResult<()> {
-        let encoder_str = fs::read_to_string(file)?;
-
-        //serde errors don't implement pyo3 trait for error From
-        let _encoder: Map<Rank, (Rank, Rank)> =
-            serde_json::from_str(&encoder_str).expect("invalid json!");
-        let encoder: Map<(Rank, Rank), Rank> = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
-
-        self.encoder = encoder;
-        self.decoder = RefCell::new(Some(_encoder));
-
-        Ok(())
-    }
-    pub fn save_encoder(&self, file: &str) -> PyResult<()> {
-        // need to reverse key-value order since serde can't serialize tuples as map keys
-        let decoder: Map<&Rank, &(Rank, Rank)> = self.encoder.iter().map(|(k, v)| (v, k)).collect();
-
-        let serialized = serde_json::to_string(&decoder).expect("invalid json!");
-        let mut f = fs::File::create(file)?;
-
-        f.write_all(serialized.as_bytes())?;
-
-        Ok(())
-    }
-
-    // TODO: properly integrate continual training from pretrained tokenizer
-    pub fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Rank> {
+    fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Rank> {
         assert!(vocab_size > 0);
         let mut pieces: Vec<Rank>;
 
-        // if !self.encoder.is_empty() {
-        //     println!("pretrained tokenizer detected!");
-        //     pieces = self.encode(text);
-        // } else {
-        //     let text = text.as_bytes();
-        //     pieces = text.iter().map(|&i| i as Rank).collect();
-        // }
-
-        let text = text.as_bytes();
-        pieces = text.iter().map(|&i| i as Rank).collect();
+        if !self.encoder.is_empty() {
+            println!("pretrained tokenizer detected!");
+            pieces = self.encode(text);
+        } else {
+            let text = text.as_bytes();
+            pieces = text.iter().map(|&i| i as Rank).collect();
+        }
 
         for _ in tqdm::tqdm(0..vocab_size - self.encoder.len()) {
             let mut counts: Map<(Rank, Rank), Rank> = Map::default();
@@ -283,10 +282,10 @@ impl BPETokenizer {
     }
 
     //TODO: add chunk_size arg or specify in config
-    pub fn encode(&self, text: &str) -> Vec<Rank> {
+    fn encode(&self, text: &str) -> Vec<Rank> {
         let text = text.as_bytes();
 
-        const CHUNK_SIZE: usize = 4096;
+        const CHUNK_SIZE: usize = 4 * 4096;
 
         let mut encoded_chunks = Vec::new();
         let z: usize = (text.len() % CHUNK_SIZE > 0) as usize;
@@ -299,8 +298,7 @@ impl BPETokenizer {
         encoded_chunks.into_iter().flatten().collect()
     }
 
-    // NOTE: python doesn't do ownership so the `_input_ids` are still useable
-    pub fn decode(&self, _input_ids: Vec<Rank>) -> String {
+    fn decode(&self, _input_ids: &[Rank]) -> String {
         const CHUNK_SIZE: usize = 4096;
 
         let mut decoded_chunks = Vec::new();
@@ -308,17 +306,77 @@ impl BPETokenizer {
         for i in 0.._input_ids.len() / CHUNK_SIZE + z {
             let chunk =
                 &_input_ids[CHUNK_SIZE * i..usize::min(CHUNK_SIZE * (i + 1), _input_ids.len())];
+            // println!("{:?}", str::from_utf8(chunk));
             decoded_chunks.push(self._decode_chunk(chunk));
         }
 
         let utf8: Vec<u8> = decoded_chunks.into_iter().flatten().collect();
-        String::from_utf8(utf8).expect("Invalid UTF-8 sequence")
+        String::from(str::from_utf8(&utf8).unwrap())
     }
+
+    // fn decode(&self, _input_ids: &[Rank]) -> String {
+    //     //need to apply merge-outs in reverse order
+    //     let decoder: Map<Rank, (Rank, Rank)> = match self.decoder.borrow_mut().take() {
+    //         Some(d) => d,
+    //         None => self.encoder.iter().map(|(&k, &v)| (v, k)).collect(),
+    //     };
+    //     let mut input_ids = Vec::from(_input_ids);
+    //
+    //     for token in (255..256 + self.encoder.len()).rev() {
+    //         let token = token as Rank;
+    //
+    //         let mut i = 0;
+    //         while i < input_ids.len() {
+    //             if input_ids[i] == token {
+    //                 let pair = *decoder.get(&token).unwrap();
+    //                 input_ids[i] = pair.0;
+    //                 input_ids.insert(i + 1, pair.1);
+    //                 i += 1;
+    //             }
+    //             i += 1;
+    //         }
+    //     }
+    //
+    //     //give back decoder
+    //     *self.decoder.borrow_mut() = Some(decoder);
+    //
+    //     let arr_u8: Vec<u8> = input_ids.iter().map(|&x| x as u8).collect();
+    //     String::from(str::from_utf8(&arr_u8).unwrap())
+    // }
 }
 
-#[pymodule]
-#[pyo3(name = "toktokenizer")]
-fn my_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<BPETokenizer>()?;
-    Ok(())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_decode() {
+        let mut tok = BPETokenizer::new(DefaultNormalizer {});
+        let _ = tok.load_encoder("wikibpe.json");
+
+        let text = String::from("this is an example. 😎");
+        assert_eq!(text, tok.decode(&tok.encode(&text)));
+    }
+
+    #[test]
+    fn test_compression() {
+        let mut tok = BPETokenizer::new(DefaultNormalizer {});
+        let _ = tok.load_encoder("wikibpe.json");
+
+        let text = String::from("this is an example. 😎");
+
+        assert!(text.len() > tok.encode(&text).len());
+    }
+
+    #[test]
+    fn test_add_special_tokens() {
+        let mut tok = BPETokenizer::new(DefaultNormalizer {});
+        let _ = tok.load_encoder("wikibpe.json");
+
+        let special_tokens = vec!["<SOS>".to_string(), "<EOS>".to_string()];
+        let _ = tok.add_special_tokens(&special_tokens);
+
+        let sentence = "<SOS>this worked<EOS>";
+        assert_eq!(tok.decode(&tok.encode(sentence)), sentence);
+    }
 }
