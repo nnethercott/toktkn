@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - main
-      - master
+      - maturin_bindings
     tags:
       - '*'
   pull_request:
