@@ -18,6 +18,7 @@ pub trait Tokenizer {
     fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Rank>;
     fn encode(&self, text: &str) -> Vec<Rank>;
     fn decode(&self, _input_ids: &[Rank]) -> String;
+    fn add_special_tokens(&mut self, tokens: &Vec<String>) -> Vec<Option<Rank>>;
 }
 
 pub trait Normalize {
@@ -249,6 +250,41 @@ impl BPETokenizer {
         f.write_all(serialized.as_bytes())?;
 
         Ok(())
+    }
+
+    pub fn add_special_tokens(&mut self, tokens: Vec<String>) -> PyResult<Vec<Option<Rank>>> {
+        let mut new_token_ids: Vec<Option<Rank>> = vec![];
+        for token in &tokens {
+            //get partial encoding
+            let mut encoded = self.encode(token);
+
+            if encoded.len() == 1 {
+                new_token_ids.push(None);
+                continue;
+            }
+
+            let mut token_id = 0;
+            while encoded.len() > 1 {
+                //add necessary merges
+                let mut counts: Map<(Rank, Rank), Rank> = Map::default();
+
+                for i in 0..encoded.len() - 1 {
+                    *counts.entry((encoded[i], encoded[i + 1])).or_insert(0) += 1;
+                }
+
+                let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
+                token_id = (self.encoder.len() + 1 + 255) as Rank;
+
+                self.encoder.insert(p, token_id);
+                _byte_pair_merge(&mut encoded, p, token_id);
+            }
+            new_token_ids.push(Some(token_id));
+        }
+        //overwrite self.decoder since we have a new encoder
+        let decoder: Map<Rank, (Rank, Rank)> = self.encoder.iter().map(|(&k, &v)| (v, k)).collect();
+        self.decoder = RefCell::new(Some(decoder));
+
+        Ok(new_token_ids)
     }
 
     // TODO: properly integrate continual training from pretrained tokenizer
