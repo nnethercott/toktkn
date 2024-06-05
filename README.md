@@ -44,6 +44,6 @@ decoded = bpe.decode(input_ids)
 
 slightly faster than openai & a lot quicker than 🤗!
 
-![alt text](performance.png)
+![alt text](https://github.com/nnethercott/tok/blob/main/performance.png?raw=true)
 
 Performance measured on 2.5MB from the [wikitext](https://huggingface.co/datasets/wikitext) test split using openai's [tiktoken gpt2 tokenizer](https://github.com/openai/tiktoken) with `tiktoken==0.6.0` and the [implementation from 🤗 tokenizers](https://huggingface.co/openai-community/gpt2) at `tokenizers==0.19.1`

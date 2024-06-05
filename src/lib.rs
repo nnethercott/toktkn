@@ -174,7 +174,7 @@ impl BPETokenizer {
                     demerges.push((i, tup));
                 }
             }
-            // our tokenizer doesn't have by default 0-255 in the encoder
+            // our tokenizer doesn't have by default 0-127 in the encoder dict
             // so this stops when we're left with u8's only
             if demerges.is_empty() {
                 break;
@@ -273,7 +273,7 @@ impl BPETokenizer {
                 }
 
                 let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
-                token_id = (self.encoder.len() + 1 + 255) as Rank;
+                token_id = (self.encoder.len() + 1 + 127) as Rank;
 
                 self.encoder.insert(p, token_id);
                 _byte_pair_merge(&mut encoded, p, token_id);
@@ -310,7 +310,7 @@ impl BPETokenizer {
             }
 
             let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
-            let token_id = (self.encoder.len() + 1 + 255) as Rank; // need 255 offset since ascii chars occupy 0-255
+            let token_id = (self.encoder.len() + 1 + 127) as Rank; // need 127 offset since ascii chars occupy 0-127
 
             self.encoder.insert(p, token_id);
             _byte_pair_merge(&mut pieces, p, token_id);
