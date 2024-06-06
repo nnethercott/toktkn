@@ -79,6 +79,7 @@ pub struct BPETokenizer {
     pub normalizer: DefaultNormalizer,
     pub encoder: Map<(Rank, Rank), Rank>, //TODO: make private later
     pub decoder: RefCell<Option<Map<Rank, (Rank, Rank)>>>,
+    pub special_tokens_map: Option<Map<String, Rank>>,
 }
 
 // impl Tokenizer for BPETokenizer {
@@ -202,7 +203,24 @@ impl BPETokenizer {
             normalizer: DefaultNormalizer {},
             encoder: Map::default(),
             decoder: RefCell::new(None),
+            special_tokens_map: None,
         }
+    }
+
+    pub fn __len__(&self) -> usize {
+        self.encoder.len() + 128
+    }
+
+    pub fn __repr__(&self) -> String {
+        if self.special_tokens_map.is_some() {
+            let repr = format!(
+                "BPETokenizer(n_vocab={}, special_tokens_map={:?})",
+                self.__len__(),
+                self.special_tokens_map.as_ref().unwrap()
+            );
+            return repr;
+        }
+        format!("BPETokenizer(n_vocab={})", self.__len__())
     }
 
     #[allow(warnings)]
@@ -211,6 +229,11 @@ impl BPETokenizer {
         let mut tok = Self::new();
         tok.load_encoder(file)?;
         Ok(tok)
+    }
+
+    #[getter]
+    pub fn special_tokens_map(&self) -> Option<Map<String, Rank>> {
+        self.special_tokens_map.clone()
     }
 
     #[getter]
@@ -284,7 +307,23 @@ impl BPETokenizer {
         let decoder: Map<Rank, (Rank, Rank)> = self.encoder.iter().map(|(&k, &v)| (v, k)).collect();
         self.decoder = RefCell::new(Some(decoder));
 
+        self._update_special_tokens_map(tokens);
+
         Ok(new_token_ids)
+    }
+
+    fn _update_special_tokens_map(&mut self, tokens: Vec<String>) {
+        let mut map;
+        if self.special_tokens_map.is_none() {
+            map = Map::default();
+        } else {
+            map = self.special_tokens_map.take().unwrap();
+        }
+
+        for token in tokens.iter() {
+            map.insert(token.clone(), self.encode(&token)[0]);
+        }
+        self.special_tokens_map = Some(map);
     }
 
     // TODO: properly integrate continual training from pretrained tokenizer

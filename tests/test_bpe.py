@@ -1,9 +1,11 @@
-import pytest
-import tok
-import random
 import os
+import random
 
-ENCODER_PATH = "/Users/nathanielnethercott/ml/tokenizers/tok/wikibpe.json"
+import numpy as np
+import pytest
+import toktokenizer as tok
+
+ENCODER_PATH = "./tiny_shakespeare_5k.json"
 DATA_PATH = "/Users/nathanielnethercott/ml/tokenizers/wikidump_test.txt"
 
 
@@ -19,9 +21,7 @@ def text():
     with open(file, "r") as f:
         text = f.read()
 
-    size = len(text)
-    offset = random.randint(0, size // 2)
-    return text[offset : offset + len(text) // 4]
+    return text[:256] #ad hoc 
 
 
 class TestBPETokenizer:
@@ -39,3 +39,10 @@ class TestBPETokenizer:
 
         bpe.save_encoder(f"{path}/encoder.json")
         assert os.path.exists(f"{path}/encoder.json")
+    
+    def test_random_encode_decode(self, bpe):
+        random_tokens = np.random.randint(low=0, high = len(bpe)-1, size = 128).tolist()
+
+        # make sure doesn't fail (like 128-256 token id gap in earlier versions)
+        bpe.decode(random_tokens)
+        assert True
