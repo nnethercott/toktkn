@@ -7,30 +7,45 @@ use std::{fs, str};
 use crate::preproc::{Normalize, DEFAULT_NORMALIZER};
 use crate::util::byte_pair_merge;
 
-//TODO:
-// - sync decoder with encoder on any methods updating encoder
-// - add logging
-
-pub type Map<K, V> = FxHashMap<K, V>; // faster hashmap
 pub type Token = u32; // 2^32 - 1 max new tokens
+
+// map aliases
+pub type FwdMap = FxHashMap<(Token, Token), Token>;
+pub type VocabMap = FxHashMap<String, Token>;
+pub type BkwdMap = FxHashMap<Token, (Token, Token)>;
 
 pub trait Tokenizer {
     fn encode(&self, text: &str) -> Vec<Token>;
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
-// NOTE: might be able to replace decode type with OnceCell or smth
+//TODO: search for window of chars in special_tokens_map
+
 pub struct BPETokenizer<'a> {
     pub normalizer: &'a dyn Normalize,
-    encoder: Map<(Token, Token), Token>,
-    decoder: RefCell<Option<Map<Token, (Token, Token)>>>,
+    encoder: FwdMap,
+    special_tokens_map: Option<VocabMap>,
+    decoder: RefCell<Option<BkwdMap>>,
+}
+
+impl<'a> Tokenizer for BPETokenizer<'_> {
+    fn encode(&self, text: &str) -> Vec<Token> {
+        let text = text.as_bytes();
+        self._encode_chunk(text)
+    }
+
+    fn decode(&self, input_ids: &[Token]) -> String {
+        let utf8: Vec<u8> = self._decode_chunk(input_ids);
+        String::from(str::from_utf8(&utf8).unwrap())
+    }
 }
 
 impl<'a> BPETokenizer<'a> {
     pub fn new(normalizer: &'a dyn Normalize) -> Self {
         Self {
             normalizer,
-            encoder: Map::default(),
+            encoder: FwdMap::default(),
+            special_tokens_map: None,
             decoder: RefCell::new(None),
         }
     }
@@ -44,8 +59,18 @@ impl<'a> BPETokenizer<'a> {
             self.encoder
                 .iter()
                 .map(|(&k, &v)| (v, k))
-                .collect::<Map<Token, (Token, Token)>>(),
+                .collect::<BkwdMap>(),
         ));
+    }
+
+    fn add_special_tokens(&mut self, token_map: VocabMap) {
+        self.special_tokens_map =
+            self.special_tokens_map
+                .take()
+                .map_or(Some(token_map.clone()), |mut m| {
+                    m.extend(token_map.into_iter());
+                    Some(m)
+                });
     }
 
     pub fn from_pretrained(file: &str) -> Result<Self, Box<dyn Error>> {
@@ -74,11 +99,11 @@ impl<'a> BPETokenizer<'a> {
 
     pub fn load_encoder(&mut self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
         let encoder_str = fs::read_to_string(file)?;
-        let _encoder: Map<Token, (Token, Token)> = serde_json::from_str(&encoder_str)?;
-        let encoder: Map<(Token, Token), Token> = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
+        let _encoder: FxHashMap<Token, (Token, Token)> = serde_json::from_str(&encoder_str)?;
+        let encoder: FwdMap = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
 
         self.encoder = encoder;
-        self.decoder = RefCell::new(Some(_encoder));
+        self._sync_decoder();
 
         Ok(())
     }
@@ -180,7 +205,7 @@ impl<'a> BPETokenizer<'a> {
         match vocab_size.checked_sub(self.len()) {
             Some(size) => {
                 for _ in tqdm::tqdm(0..size) {
-                    let mut counts: Map<(Token, Token), Token> = Map::default();
+                    let mut counts = FwdMap::default();
                     for i in 0..pieces.len() - 1 {
                         *counts.entry((pieces[i], pieces[i + 1])).or_insert(0) += 1;
                     }
@@ -197,17 +222,5 @@ impl<'a> BPETokenizer<'a> {
 
         self._sync_decoder();
         pieces
-    }
-}
-
-impl<'a> Tokenizer for BPETokenizer<'_> {
-    fn encode(&self, text: &str) -> Vec<Token> {
-        let text = text.as_bytes();
-        self._encode_chunk(text)
-    }
-
-    fn decode(&self, input_ids: &[Token]) -> String {
-        let utf8: Vec<u8> = self._decode_chunk(input_ids);
-        String::from(str::from_utf8(&utf8).unwrap())
     }
 }
