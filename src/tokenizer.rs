@@ -1,13 +1,13 @@
 use rustc_hash::FxHashMap;
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::error::Error;
 use std::io::Write;
 use std::{fs, str};
 
-use crate::preproc::Normalize;
+use crate::preproc::{Normalize, DEFAULT_NORMALIZER};
 use crate::util::byte_pair_merge;
 
-//TODO: 
+//TODO:
 // - sync decoder with encoder on any methods updating encoder
 // - add logging
 
@@ -15,16 +15,15 @@ pub type Map<K, V> = FxHashMap<K, V>; // faster hashmap
 pub type Token = u32; // 2^32 - 1 max new tokens
 
 pub trait Tokenizer {
-    fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Token>;
     fn encode(&self, text: &str) -> Vec<Token>;
-    fn decode(&self, _input_ids: &[Token]) -> String;
+    fn decode(&self, input_ids: &[Token]) -> String;
 }
 
 // NOTE: might be able to replace decode type with OnceCell or smth
 pub struct BPETokenizer<'a> {
     pub normalizer: &'a dyn Normalize,
     encoder: Map<(Token, Token), Token>,
-    decoder: Cell<Option<Map<Token, (Token, Token)>>>,
+    decoder: RefCell<Option<Map<Token, (Token, Token)>>>,
 }
 
 impl<'a> BPETokenizer<'a> {
@@ -32,16 +31,28 @@ impl<'a> BPETokenizer<'a> {
         Self {
             normalizer,
             encoder: Map::default(),
-            decoder: Cell::new(None),
+            decoder: RefCell::new(None),
         }
     }
 
-    // FIXME: figure out mutability here later ...
-    // pub fn from_pretrained(file: &str) -> Result<Self, Box<dyn Error>> {
-    //     let mut tok = Self::new(DefaultNormalizer {});
-    //     tok.load_encoder(file)?;
-    //     Ok(tok)
-    // }
+    pub fn len(&self) -> usize {
+        self.encoder.len()
+    }
+
+    fn _sync_decoder(&self) {
+        let _ = self.decoder.replace(Some(
+            self.encoder
+                .iter()
+                .map(|(&k, &v)| (v, k))
+                .collect::<Map<Token, (Token, Token)>>(),
+        ));
+    }
+
+    pub fn from_pretrained(file: &str) -> Result<Self, Box<dyn Error>> {
+        let mut tok = Self::new(&DEFAULT_NORMALIZER);
+        tok.load_encoder(file)?;
+        Ok(tok)
+    }
 
     pub fn preprocess(&self, text: &mut String) {
         self.normalizer.normalize(text);
@@ -49,10 +60,11 @@ impl<'a> BPETokenizer<'a> {
 
     pub fn save_pretrained(&self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
         // need to reverse key-value order since serde can't serialize tuples as map keys
-        let decoder: Map<&Token, &(Token, Token)> =
-            self.encoder.iter().map(|(k, v)| (v, k)).collect();
+        self._sync_decoder();
+        let binding = self.decoder.borrow();
+        let decoder = binding.as_ref().unwrap();
 
-        let serialized = serde_json::to_string(&decoder)?;
+        let serialized = serde_json::to_string(decoder)?;
         let mut f = fs::File::create(file)?;
 
         f.write_all(serialized.as_bytes())?;
@@ -66,7 +78,7 @@ impl<'a> BPETokenizer<'a> {
         let encoder: Map<(Token, Token), Token> = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
 
         self.encoder = encoder;
-        self.decoder = Cell::new(Some(_encoder));
+        self.decoder = RefCell::new(Some(_encoder));
 
         Ok(())
     }
@@ -126,13 +138,9 @@ impl<'a> BPETokenizer<'a> {
         let mut tokens: Vec<Token> = Vec::from(chunk);
 
         // lazy init
-        // TODO: move me out of this scope
-        let decoder = self.decoder.replace(None).unwrap_or_else(|| {
-            self.encoder
-                .iter()
-                .map(|(&k, &v)| (v, k))
-                .collect::<Map<Token, (Token, Token)>>()
-        });
+        self._sync_decoder();
+        let binding = self.decoder.borrow();
+        let decoder = binding.as_ref().unwrap();
 
         loop {
             let mut demerges = Vec::new();
@@ -154,16 +162,11 @@ impl<'a> BPETokenizer<'a> {
             }
         }
 
-        // give back decoder
-        self.decoder.set(Some(decoder));
-
         tokens.iter().map(|&x| x as u8).collect()
     }
-}
 
-impl<'a> Tokenizer for BPETokenizer<'_> {
-    fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Token> {
-        assert!(vocab_size > 0);
+    pub fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Token> {
+        assert!(vocab_size > 0, "can't train on vocab_size <= 0!");
         let mut pieces: Vec<Token>;
 
         if !self.encoder.is_empty() {
@@ -174,50 +177,37 @@ impl<'a> Tokenizer for BPETokenizer<'_> {
             pieces = text.iter().map(|&i| i as Token).collect();
         }
 
-        for _ in tqdm::tqdm(0..vocab_size - self.encoder.len()) {
-            let mut counts: Map<(Token, Token), Token> = Map::default();
-            for i in 0..pieces.len() - 1 {
-                *counts.entry((pieces[i], pieces[i + 1])).or_insert(0) += 1;
+        match vocab_size.checked_sub(self.len()) {
+            Some(size) => {
+                for _ in tqdm::tqdm(0..size) {
+                    let mut counts: Map<(Token, Token), Token> = Map::default();
+                    for i in 0..pieces.len() - 1 {
+                        *counts.entry((pieces[i], pieces[i + 1])).or_insert(0) += 1;
+                    }
+
+                    let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
+                    let token_id = (self.len() + 127 + 1) as Token;
+
+                    self.encoder.insert(p, token_id);
+                    byte_pair_merge(&mut pieces, p, token_id);
+                }
             }
+            None => println!("requested vocab_size: {} already reached.", vocab_size),
+        };
 
-            let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
-            let token_id = (self.encoder.len() + 1 + 255) as Token; // need 255 offset since ascii chars occupy 0-255
-
-            self.encoder.insert(p, token_id);
-            byte_pair_merge(&mut pieces, p, token_id);
-        }
+        self._sync_decoder();
         pieces
     }
+}
 
-    // FIXME: this is a weird approach
+impl<'a> Tokenizer for BPETokenizer<'_> {
     fn encode(&self, text: &str) -> Vec<Token> {
         let text = text.as_bytes();
-
-        const CHUNK_SIZE: usize = 4 * 4096;
-
-        let mut encoded_chunks = Vec::new();
-        let z: usize = (text.len() % CHUNK_SIZE > 0) as usize;
-        for i in 0..text.len() / CHUNK_SIZE + z {
-            let chunk = &text[CHUNK_SIZE * i..usize::min(CHUNK_SIZE * (i + 1), text.len())];
-            encoded_chunks.push(self._encode_chunk(chunk));
-        }
-
-        encoded_chunks.into_iter().flatten().collect()
+        self._encode_chunk(text)
     }
 
-    fn decode(&self, _input_ids: &[Token]) -> String {
-        const CHUNK_SIZE: usize = 4096;
-
-        let mut decoded_chunks = Vec::new();
-        let z: usize = (_input_ids.len() % CHUNK_SIZE > 0) as usize;
-        for i in 0.._input_ids.len() / CHUNK_SIZE + z {
-            let chunk =
-                &_input_ids[CHUNK_SIZE * i..usize::min(CHUNK_SIZE * (i + 1), _input_ids.len())];
-            // println!("{:?}", str::from_utf8(chunk));
-            decoded_chunks.push(self._decode_chunk(chunk));
-        }
-
-        let utf8: Vec<u8> = decoded_chunks.into_iter().flatten().collect();
+    fn decode(&self, input_ids: &[Token]) -> String {
+        let utf8: Vec<u8> = self._decode_chunk(input_ids);
         String::from(str::from_utf8(&utf8).unwrap())
     }
 }

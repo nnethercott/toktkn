@@ -3,6 +3,9 @@ use toktokenizer::{
     BPETokenizer, Tokenizer,
 };
 
+use fake::faker::lorem::en::{Paragraph, Sentence};
+use fake::{Fake, Faker};
+
 #[test]
 fn test_encode_decode() {
     let mut tok = BPETokenizer::new(&DefaultNormalizer);
@@ -28,3 +31,18 @@ fn test_compression() {
         "tokenized sequence should be shorter or equal to original"
     );
 }
+
+#[test]
+fn test_restart_train_works(){
+    let normalizer = DefaultNormalizer;
+    let mut tok = BPETokenizer::new(&normalizer);
+
+    let corpus: String = Paragraph(100..101).fake();
+
+    tok.train(&corpus, 50);
+    assert!(tok.len()==50, "encoder size does not match vocab_size");
+
+    tok.train(&corpus, 75);
+    assert!(tok.len()==75, "encoder size does not match vocab_size");
+}
+

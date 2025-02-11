@@ -24,3 +24,5 @@ impl Normalize for DefaultNormalizer {
         });
     }
 }
+
+pub const DEFAULT_NORMALIZER: DefaultNormalizer = DefaultNormalizer;
