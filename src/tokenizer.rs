@@ -1,42 +1,62 @@
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::Write;
 use std::{fs, str};
 
 use crate::preproc::{Normalize, DEFAULT_NORMALIZER};
-use crate::util::byte_pair_merge;
+use crate::util::{inject_special_tokens, ngram_replace, replace_special_tokens};
 
-//TODO:
-// - sync decoder with encoder on any methods updating encoder
-// - add logging
-
-pub type Map<K, V> = FxHashMap<K, V>; // faster hashmap
 pub type Token = u32; // 2^32 - 1 max new tokens
+
+// map aliases
+pub type FwdMap = FxHashMap<(Token, Token), Token>;
+pub type BkwdMap = FxHashMap<Token, (Token, Token)>;
+pub type VocabMap = FxHashMap<String, Token>;
 
 pub trait Tokenizer {
     fn encode(&self, text: &str) -> Vec<Token>;
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
-// NOTE: might be able to replace decode type with OnceCell or smth
+// TODO: add tokenizer config
+
 pub struct BPETokenizer<'a> {
     pub normalizer: &'a dyn Normalize,
-    encoder: Map<(Token, Token), Token>,
-    decoder: RefCell<Option<Map<Token, (Token, Token)>>>,
+    pub encoder: FwdMap,
+    pub special_tokens_map: Option<VocabMap>,
+    pub decoder: RefCell<Option<BkwdMap>>,
+}
+
+impl<'a> Tokenizer for BPETokenizer<'_> {
+    fn encode(&self, text: &str) -> Vec<Token> {
+        let text = text.as_bytes();
+        self._encode_chunk(text)
+    }
+
+    fn decode(&self, input_ids: &[Token]) -> String {
+        let utf8: Vec<u8> = self._decode_chunk(input_ids);
+        let s =
+            str::from_utf8(&utf8).expect(&format!("failed to decode into valid utf-8: {:?}", utf8));
+        s.into()
+    }
 }
 
 impl<'a> BPETokenizer<'a> {
     pub fn new(normalizer: &'a dyn Normalize) -> Self {
         Self {
             normalizer,
-            encoder: Map::default(),
+            encoder: FwdMap::default(),
+            special_tokens_map: None,
             decoder: RefCell::new(None),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.encoder.len()
+        match self.special_tokens_map.as_ref() {
+            Some(map) => map.len() + self.encoder.len(),
+            None => self.encoder.len(),
+        }
     }
 
     fn _sync_decoder(&self) {
@@ -44,8 +64,25 @@ impl<'a> BPETokenizer<'a> {
             self.encoder
                 .iter()
                 .map(|(&k, &v)| (v, k))
-                .collect::<Map<Token, (Token, Token)>>(),
+                .collect::<BkwdMap>(),
         ));
+    }
+
+    pub fn add_special_tokens<S: Into<String>>(&mut self, tokens: Vec<S>) {
+        let token_id = self.len() + 128;
+        let token_map: VocabMap = tokens
+            .into_iter()
+            .enumerate()
+            .map(|(e, s)| (s.into(), (token_id + e) as Token))
+            .collect();
+
+        self.special_tokens_map =
+            self.special_tokens_map
+                .take()
+                .map_or(Some(token_map.clone()), |mut m| {
+                    m.extend(token_map.into_iter());
+                    Some(m)
+                });
     }
 
     pub fn from_pretrained(file: &str) -> Result<Self, Box<dyn Error>> {
@@ -74,17 +111,20 @@ impl<'a> BPETokenizer<'a> {
 
     pub fn load_encoder(&mut self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
         let encoder_str = fs::read_to_string(file)?;
-        let _encoder: Map<Token, (Token, Token)> = serde_json::from_str(&encoder_str)?;
-        let encoder: Map<(Token, Token), Token> = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
+        let _encoder: FxHashMap<Token, (Token, Token)> = serde_json::from_str(&encoder_str)?;
+        let encoder: FwdMap = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
 
         self.encoder = encoder;
-        self.decoder = RefCell::new(Some(_encoder));
+        self._sync_decoder();
 
         Ok(())
     }
 
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {
         let mut tokens: Vec<Token> = chunk.to_vec().iter().map(|&x| x as Token).collect();
+        if let Some(map) = self.special_tokens_map.as_ref() {
+            replace_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
+        }
 
         loop {
             let mut merges = Vec::new();
@@ -134,8 +174,8 @@ impl<'a> BPETokenizer<'a> {
         tokens
     }
 
-    fn _decode_chunk(&self, chunk: &[Token]) -> Vec<u8> {
-        let mut tokens: Vec<Token> = Vec::from(chunk);
+    fn _decode_chunk(&self, tokens: &[Token]) -> Vec<u8> {
+        let mut tokens: Vec<Token> = Vec::from(tokens);
 
         // lazy init
         self._sync_decoder();
@@ -162,6 +202,11 @@ impl<'a> BPETokenizer<'a> {
             }
         }
 
+        // special tokens
+        if let Some(map) = self.special_tokens_map.as_ref() {
+            inject_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
+        }
+
         tokens.iter().map(|&x| x as u8).collect()
     }
 
@@ -180,7 +225,7 @@ impl<'a> BPETokenizer<'a> {
         match vocab_size.checked_sub(self.len()) {
             Some(size) => {
                 for _ in tqdm::tqdm(0..size) {
-                    let mut counts: Map<(Token, Token), Token> = Map::default();
+                    let mut counts = FwdMap::default();
                     for i in 0..pieces.len() - 1 {
                         *counts.entry((pieces[i], pieces[i + 1])).or_insert(0) += 1;
                     }
@@ -189,7 +234,7 @@ impl<'a> BPETokenizer<'a> {
                     let token_id = (self.len() + 127 + 1) as Token;
 
                     self.encoder.insert(p, token_id);
-                    byte_pair_merge(&mut pieces, p, token_id);
+                    ngram_replace(&mut pieces, &[p.0, p.1], &[token_id]);
                 }
             }
             None => println!("requested vocab_size: {} already reached.", vocab_size),
@@ -197,17 +242,5 @@ impl<'a> BPETokenizer<'a> {
 
         self._sync_decoder();
         pieces
-    }
-}
-
-impl<'a> Tokenizer for BPETokenizer<'_> {
-    fn encode(&self, text: &str) -> Vec<Token> {
-        let text = text.as_bytes();
-        self._encode_chunk(text)
-    }
-
-    fn decode(&self, input_ids: &[Token]) -> String {
-        let utf8: Vec<u8> = self._decode_chunk(input_ids);
-        String::from(str::from_utf8(&utf8).unwrap())
     }
 }
