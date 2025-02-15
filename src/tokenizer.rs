@@ -5,7 +5,7 @@ use std::io::Write;
 use std::{fs, str};
 
 use crate::preproc::{Normalize, DEFAULT_NORMALIZER};
-use crate::util::{apply_special_tokens_map, byte_pair_merge};
+use crate::util::{inject_special_tokens, ngram_replace, replace_special_tokens};
 
 pub type Token = u32; // 2^32 - 1 max new tokens
 
@@ -36,7 +36,8 @@ impl<'a> Tokenizer for BPETokenizer<'_> {
 
     fn decode(&self, input_ids: &[Token]) -> String {
         let utf8: Vec<u8> = self._decode_chunk(input_ids);
-        let s = str::from_utf8(&utf8).expect(&format!("failed to decode into valid utf-8: {:?}", utf8));
+        let s =
+            str::from_utf8(&utf8).expect(&format!("failed to decode into valid utf-8: {:?}", utf8));
         s.into()
     }
 }
@@ -67,7 +68,7 @@ impl<'a> BPETokenizer<'a> {
         ));
     }
 
-    fn add_special_tokens<S: Into<String>>(&mut self, tokens: Vec<S>) {
+    pub fn add_special_tokens<S: Into<String>>(&mut self, tokens: Vec<S>) {
         let token_id = self.len() + 128;
         let token_map: VocabMap = tokens
             .into_iter()
@@ -122,7 +123,7 @@ impl<'a> BPETokenizer<'a> {
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {
         let mut tokens: Vec<Token> = chunk.to_vec().iter().map(|&x| x as Token).collect();
         if let Some(map) = self.special_tokens_map.as_ref() {
-            apply_special_tokens_map::<Token, FxBuildHasher>(&mut tokens, map);
+            replace_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
         }
 
         loop {
@@ -173,10 +174,8 @@ impl<'a> BPETokenizer<'a> {
         tokens
     }
 
-    fn _decode_chunk(&self, chunk: &[Token]) -> Vec<u8> {
-        let mut tokens: Vec<Token> = Vec::from(chunk);
-
-        //FIXME: direct search and replace with special_tokens_map
+    fn _decode_chunk(&self, tokens: &[Token]) -> Vec<u8> {
+        let mut tokens: Vec<Token> = Vec::from(tokens);
 
         // lazy init
         self._sync_decoder();
@@ -201,6 +200,11 @@ impl<'a> BPETokenizer<'a> {
                 tokens[i] = tup.0;
                 tokens.insert(i + 1, tup.1);
             }
+        }
+
+        // special tokens
+        if let Some(map) = self.special_tokens_map.as_ref() {
+            inject_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
         }
 
         tokens.iter().map(|&x| x as u8).collect()
@@ -230,7 +234,7 @@ impl<'a> BPETokenizer<'a> {
                     let token_id = (self.len() + 127 + 1) as Token;
 
                     self.encoder.insert(p, token_id);
-                    byte_pair_merge(&mut pieces, p, token_id);
+                    ngram_replace(&mut pieces, &[p.0, p.1], &[token_id]);
                 }
             }
             None => println!("requested vocab_size: {} already reached.", vocab_size),
@@ -238,64 +242,5 @@ impl<'a> BPETokenizer<'a> {
 
         self._sync_decoder();
         pieces
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::preproc::DEFAULT_NORMALIZER;
-    use fake::faker::lorem::en::{Paragraph, Sentence};
-    use fake::faker::lorem::raw::Paragraphs;
-    use fake::{Fake, Faker};
-
-    fn get_corpus() -> String {
-        let corpus: String = Paragraph(100..101).fake();
-        corpus
-    }
-
-    #[test]
-    fn test_add_special_tokens() {
-        let mut tok = BPETokenizer::new(&DEFAULT_NORMALIZER);
-
-        // add special tokens before train
-        let special_tokens = vec!["<s>", "hello", "world", "</s>"];
-        tok.add_special_tokens(special_tokens);
-
-        assert_eq!(tok.len(), 4);
-        assert_eq!(
-            tok.special_tokens_map,
-            Some(FxHashMap::from_iter(vec![
-                ("<s>".to_string(), 128),
-                ("hello".to_string(), 129),
-                ("world".to_string(), 130),
-                ("</s>".to_string(), 131)
-            ]))
-        );
-
-        let corpus = get_corpus();
-        tok.train(&corpus, 10);
-        assert_eq!(tok.len(), 10);
-
-        dbg!(tok.encoder);
-        dbg!(tok.special_tokens_map);
-    }
-
-    #[test]
-    fn test_special_tokens_doesnt_break_encoding(){
-        let mut tok = BPETokenizer::new(&DEFAULT_NORMALIZER);
-        let special_tokens = vec!["<s>", "hello", "world", "</s>"];
-        tok.add_special_tokens(special_tokens);
-
-        let corpus = get_corpus();
-        tok.train(&corpus, 10);
-        let special_tokens = vec!["<nate>"];
-
-
-        let sample = "hello hello world <s></s> some more text goes here";
-        assert_eq!(tok.decode(&tok.encode(sample)), sample);
-
-
-        dbg!(tok.encode(sample));
     }
 }

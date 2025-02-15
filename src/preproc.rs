@@ -1,5 +1,4 @@
 // preprocessing strategies
-
 pub trait Normalize {
     fn normalize(&self, text: &mut String);
 }

@@ -4,7 +4,7 @@ use std::{
 };
 
 /// replace `ngram`s in `tokens` with `replace`
-fn _ngram_merge<T>(tokens: &mut Vec<T>, ngram: &[T], replace: T)
+pub fn ngram_replace<T>(tokens: &mut Vec<T>, ngram: &[T], replace: &[T])
 where
     T: PartialEq + Copy,
 {
@@ -29,18 +29,11 @@ where
 
     // NOTE: from a leetcode (can't remember which)
     for i in remove.iter().rev() {
-        *tokens = [&tokens[0..*i], &[replace], &tokens[*i + ngram.len()..]].concat();
+        *tokens = [&tokens[0..*i], replace, &tokens[*i + ngram.len()..]].concat();
     }
 }
 
-pub fn byte_pair_merge<T>(tokens: &mut Vec<T>, bigram: (T, T), replace: T)
-where
-    T: PartialEq + Copy,
-{
-    _ngram_merge(tokens, &[bigram.0, bigram.1], replace);
-}
-
-pub fn apply_special_tokens_map<T, S>(tokens: &mut Vec<T>, map: &HashMap<String, T, S>)
+pub fn replace_special_tokens<T, S>(tokens: &mut Vec<T>, map: &HashMap<String, T, S>)
 where
     T: PartialEq + Copy,
     T: From<u8>,
@@ -49,6 +42,19 @@ where
     // assume special tokens appear in no subwords
     map.iter().for_each(|(word, &t)|{
         let ngram: Vec<T> = word.chars().map(|c| T::from(c as u8)).collect();
-        _ngram_merge(tokens, &ngram, t);
+        ngram_replace(tokens, &ngram, &[t]);
+    });
+}
+
+pub fn inject_special_tokens<T, S>(tokens: &mut Vec<T>, map: &HashMap<String, T, S>)
+where
+    T: PartialEq + Copy,
+    T: From<u8>,
+    S: BuildHasher,
+{
+    // assume special tokens appear in no subwords
+    map.iter().for_each(|(word, &t)|{
+        let ngram: Vec<T> = word.chars().map(|c| T::from(c as u8)).collect();
+        ngram_replace(tokens, &[t], &ngram);
     });
 }
