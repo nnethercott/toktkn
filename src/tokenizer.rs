@@ -4,6 +4,7 @@ use std::error::Error;
 use std::io::Write;
 use std::{fs, str};
 
+use crate::config::TokenizerConfig;
 use crate::preproc::{Normalize, DEFAULT_NORMALIZER};
 use crate::util::{inject_special_tokens, ngram_replace, replace_special_tokens};
 
@@ -19,13 +20,12 @@ pub trait Tokenizer {
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
-// TODO: add tokenizer config
-
 pub struct BPETokenizer<'a> {
-    pub normalizer: &'a dyn Normalize,
+    pub normalizer: &'a dyn Normalize,  //TODO: look up `enum_dispatch`
     pub encoder: FwdMap,
     pub special_tokens_map: Option<VocabMap>,
     pub decoder: RefCell<Option<BkwdMap>>,
+    pub vocab_size: usize,
 }
 
 impl<'a> Tokenizer for BPETokenizer<'_> {
@@ -43,12 +43,13 @@ impl<'a> Tokenizer for BPETokenizer<'_> {
 }
 
 impl<'a> BPETokenizer<'a> {
-    pub fn new(normalizer: &'a dyn Normalize) -> Self {
+    pub fn new(config: TokenizerConfig, normalizer: &'a dyn Normalize) -> Self {
         Self {
             normalizer,
             encoder: FwdMap::default(),
-            special_tokens_map: None,
             decoder: RefCell::new(None),
+            vocab_size: config.vocab_size,
+            special_tokens_map: config.special_tokens_map,
         }
     }
 
@@ -85,39 +86,8 @@ impl<'a> BPETokenizer<'a> {
                 });
     }
 
-    pub fn from_pretrained(file: &str) -> Result<Self, Box<dyn Error>> {
-        let mut tok = Self::new(&DEFAULT_NORMALIZER);
-        tok.load_encoder(file)?;
-        Ok(tok)
-    }
-
     pub fn preprocess(&self, text: &mut String) {
         self.normalizer.normalize(text);
-    }
-
-    pub fn save_pretrained(&self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // need to reverse key-value order since serde can't serialize tuples as map keys
-        self._sync_decoder();
-        let binding = self.decoder.borrow();
-        let decoder = binding.as_ref().unwrap();
-
-        let serialized = serde_json::to_string(decoder)?;
-        let mut f = fs::File::create(file)?;
-
-        f.write_all(serialized.as_bytes())?;
-
-        Ok(())
-    }
-
-    pub fn load_encoder(&mut self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let encoder_str = fs::read_to_string(file)?;
-        let _encoder: FxHashMap<Token, (Token, Token)> = serde_json::from_str(&encoder_str)?;
-        let encoder: FwdMap = _encoder.iter().map(|(&k, &v)| (v, k)).collect();
-
-        self.encoder = encoder;
-        self._sync_decoder();
-
-        Ok(())
     }
 
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {
@@ -210,8 +180,8 @@ impl<'a> BPETokenizer<'a> {
         tokens.iter().map(|&x| x as u8).collect()
     }
 
-    pub fn train(&mut self, text: &str, vocab_size: usize) -> Vec<Token> {
-        assert!(vocab_size > 0, "can't train on vocab_size <= 0!");
+    // TODO: optimize with multi processing and broadcast ?
+    pub fn train(&mut self, text: &str) -> Vec<Token> {
         let mut pieces: Vec<Token>;
 
         if !self.encoder.is_empty() {
@@ -222,7 +192,7 @@ impl<'a> BPETokenizer<'a> {
             pieces = text.iter().map(|&i| i as Token).collect();
         }
 
-        match vocab_size.checked_sub(self.len()) {
+        match self.vocab_size.checked_sub(self.len()) {
             Some(size) => {
                 for _ in tqdm::tqdm(0..size) {
                     let mut counts = FwdMap::default();
