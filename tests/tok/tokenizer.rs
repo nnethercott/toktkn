@@ -1,15 +1,16 @@
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
 use toktokenizer::{
-    preproc::{DefaultNormalizer, Normalize, DEFAULT_NORMALIZER},
-    BPETokenizer, Tokenizer,
+    config::TokenizerConfig, preproc::{DefaultNormalizer, Normalize, DEFAULT_NORMALIZER}, BPETokenizer, Tokenizer
 };
 
 use crate::helpers::{get_corpus, get_sentence};
 
 #[test]
 fn test_encode_decode() {
-    let mut tok = BPETokenizer::new(&DefaultNormalizer);
-    let _ = tok.load_encoder("wikibpe.json");
+    let config = TokenizerConfig::new(42);
+    let mut tok = BPETokenizer::new(config);
+
+    tok.train(&get_corpus());
 
     let text = get_sentence();
     let encoded = tok.encode(&text);

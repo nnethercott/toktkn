@@ -5,8 +5,10 @@ use std::io::Write;
 use std::{fs, str};
 
 use crate::config::TokenizerConfig;
-use crate::preproc::{Normalize, DEFAULT_NORMALIZER};
+use crate::preproc::Normalize;
 use crate::util::{inject_special_tokens, ngram_replace, replace_special_tokens};
+
+use crate::config::Pretrained;
 
 pub type Token = u32; // 2^32 - 1 max new tokens
 
@@ -20,12 +22,14 @@ pub trait Tokenizer {
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
+//TODO: look up `enum_dispatch`
+//TODO: move normalizer into config
+
 pub struct BPETokenizer<'a> {
-    pub normalizer: &'a dyn Normalize,  //TODO: look up `enum_dispatch`
+    pub normalizer: &'a dyn Normalize,
     pub encoder: FwdMap,
-    pub special_tokens_map: Option<VocabMap>,
     pub decoder: RefCell<Option<BkwdMap>>,
-    pub vocab_size: usize,
+    pub config: TokenizerConfig,
 }
 
 impl<'a> Tokenizer for BPETokenizer<'_> {
@@ -42,19 +46,31 @@ impl<'a> Tokenizer for BPETokenizer<'_> {
     }
 }
 
+// impl Pretrained for BPETokenizer {
+//     fn from_pretrained(path: &str) -> Result<Self, std::io::Error> {
+//         let config = TokenizerConfig::from_pretrained(path)?;
+//         let tokenizer = BPETokenizer::new(config);
+//         // load the normal token map from here
+//         todo!()
+//     }
+//
+//     fn save_pretrained(&self, path: &str) -> Result<(), std::io::Error> {
+//         std::todo!()
+//     }
+// }
+
 impl<'a> BPETokenizer<'a> {
     pub fn new(config: TokenizerConfig, normalizer: &'a dyn Normalize) -> Self {
         Self {
             normalizer,
             encoder: FwdMap::default(),
             decoder: RefCell::new(None),
-            vocab_size: config.vocab_size,
-            special_tokens_map: config.special_tokens_map,
+            config,
         }
     }
 
     pub fn len(&self) -> usize {
-        match self.special_tokens_map.as_ref() {
+        match self.config.special_tokens_map.as_ref() {
             Some(map) => map.len() + self.encoder.len(),
             None => self.encoder.len(),
         }
@@ -77,8 +93,9 @@ impl<'a> BPETokenizer<'a> {
             .map(|(e, s)| (s.into(), (token_id + e) as Token))
             .collect();
 
-        self.special_tokens_map =
-            self.special_tokens_map
+        self.config.special_tokens_map =
+            self.config
+                .special_tokens_map
                 .take()
                 .map_or(Some(token_map.clone()), |mut m| {
                     m.extend(token_map.into_iter());
@@ -92,7 +109,7 @@ impl<'a> BPETokenizer<'a> {
 
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {
         let mut tokens: Vec<Token> = chunk.to_vec().iter().map(|&x| x as Token).collect();
-        if let Some(map) = self.special_tokens_map.as_ref() {
+        if let Some(map) = self.config.special_tokens_map.as_ref() {
             replace_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
         }
 
@@ -173,7 +190,7 @@ impl<'a> BPETokenizer<'a> {
         }
 
         // special tokens
-        if let Some(map) = self.special_tokens_map.as_ref() {
+        if let Some(map) = self.config.special_tokens_map.as_ref() {
             inject_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
         }
 
@@ -192,7 +209,7 @@ impl<'a> BPETokenizer<'a> {
             pieces = text.iter().map(|&i| i as Token).collect();
         }
 
-        match self.vocab_size.checked_sub(self.len()) {
+        match self.config.vocab_size.checked_sub(self.len()) {
             Some(size) => {
                 for _ in tqdm::tqdm(0..size) {
                     let mut counts = FwdMap::default();
@@ -207,7 +224,10 @@ impl<'a> BPETokenizer<'a> {
                     ngram_replace(&mut pieces, &[p.0, p.1], &[token_id]);
                 }
             }
-            None => println!("requested vocab_size: {} already reached.", vocab_size),
+            None => println!(
+                "requested vocab_size: {} already reached.",
+                self.config.vocab_size
+            ),
         };
 
         self._sync_decoder();
