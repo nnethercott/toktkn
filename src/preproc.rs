@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 // preprocessing strategies
 pub trait Normalize {
     fn normalize(&self, text: &mut String);
@@ -23,3 +25,25 @@ impl Normalize for DefaultNormalizer {
         });
     }
 }
+
+// hack
+#[derive(Serialize, Deserialize)]
+pub enum Normalizer{
+    WhitespaceOnly,
+    // Custom(T),
+}
+
+impl Normalizer{
+    pub fn into_strategy(&self) -> impl Normalize{
+        match &self{
+            Normalizer::WhitespaceOnly => DefaultNormalizer
+        }
+    }
+}
+
+impl Default for Normalizer{
+    fn default() -> Self {
+        Normalizer::WhitespaceOnly
+    }
+}
+

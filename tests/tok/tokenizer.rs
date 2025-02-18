@@ -1,13 +1,13 @@
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
 use toktokenizer::{
-    config::TokenizerConfig, preproc::{DefaultNormalizer, Normalize, DEFAULT_NORMALIZER}, BPETokenizer, Tokenizer
+    config::TokenizerConfig, preproc::{DefaultNormalizer, Normalize}, BPETokenizer, Tokenizer
 };
 
 use crate::helpers::{get_corpus, get_sentence};
 
 #[test]
 fn test_encode_decode() {
-    let config = TokenizerConfig::new(42);
+    let config = TokenizerConfig::new(42, None);
     let mut tok = BPETokenizer::new(config);
 
     tok.train(&get_corpus());
@@ -20,22 +20,20 @@ fn test_encode_decode() {
 }
 
 #[test]
-fn test_restart_train_works() {
-    let normalizer = DefaultNormalizer;
-    let mut tok = BPETokenizer::new(&normalizer);
+fn test_train_works() {
+    let config = TokenizerConfig::new(42, None);
+    let mut tok = BPETokenizer::new(config);
 
     let corpus = get_corpus();
 
-    tok.train(&corpus, 50);
-    assert!(tok.len() == 50);
-
-    tok.train(&corpus, 75);
-    assert!(tok.len() == 75);
+    tok.train(&corpus);
+    assert!(tok.len() == tok.config.vocab_size);
 }
 
 #[test]
-fn test_add_special_tokens() {
-    let mut tok = BPETokenizer::new(&DEFAULT_NORMALIZER);
+fn test_special_tokens_map(){
+    let config = TokenizerConfig::new(10, None);
+    let mut tok = BPETokenizer::new(config);
 
     // add special tokens before train
     let special_tokens = vec!["<s>", "hello", "world", "</s>"];
@@ -43,7 +41,7 @@ fn test_add_special_tokens() {
 
     assert_eq!(tok.len(), 4);
     assert_eq!(
-        tok.special_tokens_map,
+        tok.config.special_tokens_map,
         Some(FxHashMap::from_iter(vec![
             ("<s>".to_string(), 128),
             ("hello".to_string(), 129),
@@ -53,21 +51,23 @@ fn test_add_special_tokens() {
     );
 
     let corpus = get_corpus();
-    tok.train(&corpus, 10);
+    tok.train(&corpus);
     assert_eq!(tok.len(), 10);
 
     dbg!(tok.encoder);
-    dbg!(tok.special_tokens_map);
+    dbg!(tok.config.special_tokens_map);
 }
 
 #[test]
 fn test_special_tokens_doesnt_break_encoding() {
-    let mut tok = BPETokenizer::new(&DEFAULT_NORMALIZER);
+    let config = TokenizerConfig::new(10, None);
+    let mut tok = BPETokenizer::new(config);
+
     let special_tokens = vec!["<s>", "hello", "world", "</s>"];
     tok.add_special_tokens(special_tokens);
 
     let corpus = get_corpus();
-    tok.train(&corpus, 10);
+    tok.train(&corpus);
     let special_tokens = vec!["<nate>"];
 
     let mut sample = String::from("hello hello world <s></s> some more text goes here");

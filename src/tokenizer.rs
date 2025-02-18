@@ -25,14 +25,14 @@ pub trait Tokenizer {
 //TODO: look up `enum_dispatch`
 //TODO: move normalizer into config
 
-pub struct BPETokenizer<'a> {
-    pub normalizer: &'a dyn Normalize,
+pub struct BPETokenizer {
     pub encoder: FwdMap,
     pub decoder: RefCell<Option<BkwdMap>>,
     pub config: TokenizerConfig,
+    preproc: Box<dyn Normalize>,
 }
 
-impl<'a> Tokenizer for BPETokenizer<'_> {
+impl Tokenizer for BPETokenizer {
     fn encode(&self, text: &str) -> Vec<Token> {
         let text = text.as_bytes();
         self._encode_chunk(text)
@@ -46,26 +46,15 @@ impl<'a> Tokenizer for BPETokenizer<'_> {
     }
 }
 
-// impl Pretrained for BPETokenizer {
-//     fn from_pretrained(path: &str) -> Result<Self, std::io::Error> {
-//         let config = TokenizerConfig::from_pretrained(path)?;
-//         let tokenizer = BPETokenizer::new(config);
-//         // load the normal token map from here
-//         todo!()
-//     }
-//
-//     fn save_pretrained(&self, path: &str) -> Result<(), std::io::Error> {
-//         std::todo!()
-//     }
-// }
+impl BPETokenizer {
+    pub fn new(config: TokenizerConfig) -> Self {
+        let preproc = config.preproc.into_strategy();
 
-impl<'a> BPETokenizer<'a> {
-    pub fn new(config: TokenizerConfig, normalizer: &'a dyn Normalize) -> Self {
         Self {
-            normalizer,
             encoder: FwdMap::default(),
             decoder: RefCell::new(None),
             config,
+            preproc: Box::new(preproc),
         }
     }
 
@@ -104,7 +93,7 @@ impl<'a> BPETokenizer<'a> {
     }
 
     pub fn preprocess(&self, text: &mut String) {
-        self.normalizer.normalize(text);
+        self.preproc.normalize(text);
     }
 
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {
