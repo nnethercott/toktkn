@@ -1,7 +1,7 @@
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
-use std::cell::RefCell;
 use std::error::Error;
 use std::io::Write;
+use std::sync::RwLock;
 use std::{fs, str};
 
 use crate::config::TokenizerConfig;
@@ -27,9 +27,9 @@ pub trait Tokenizer {
 
 pub struct BPETokenizer {
     pub encoder: FwdMap,
-    pub decoder: RefCell<Option<BkwdMap>>,
+    pub decoder: RwLock<Option<BkwdMap>>, // thread-safe
     pub config: TokenizerConfig,
-    preproc: Box<dyn Normalize>,
+    preproc: Box<dyn Normalize+Send+Sync>,
 }
 
 impl Tokenizer for BPETokenizer {
@@ -52,9 +52,9 @@ impl BPETokenizer {
 
         Self {
             encoder: FwdMap::default(),
-            decoder: RefCell::new(None),
+            decoder: RwLock::new(None),
             config,
-            preproc: Box::new(preproc),
+            preproc,
         }
     }
 
@@ -66,12 +66,13 @@ impl BPETokenizer {
     }
 
     fn _sync_decoder(&self) {
-        let _ = self.decoder.replace(Some(
+        let mut inner = self.decoder.write().unwrap();
+        inner.replace(
             self.encoder
                 .iter()
                 .map(|(&k, &v)| (v, k))
                 .collect::<BkwdMap>(),
-        ));
+        );
     }
 
     pub fn add_special_tokens<S: Into<String>>(&mut self, tokens: Vec<S>) {
@@ -150,13 +151,18 @@ impl BPETokenizer {
         tokens
     }
 
+    // TODO: custom errors ?
     fn _decode_chunk(&self, tokens: &[Token]) -> Vec<u8> {
         let mut tokens: Vec<Token> = Vec::from(tokens);
 
         // lazy init
         self._sync_decoder();
-        let binding = self.decoder.borrow();
-        let decoder = binding.as_ref().unwrap();
+        let lock = self
+            .decoder
+            .read()
+            .expect("could not acquire lock");
+
+        let decoder = lock.as_ref().unwrap();
 
         loop {
             let mut demerges = Vec::new();

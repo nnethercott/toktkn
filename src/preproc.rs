@@ -28,22 +28,21 @@ impl Normalize for DefaultNormalizer {
 
 // hack
 #[derive(Serialize, Deserialize)]
-pub enum Normalizer{
+pub enum Normalizer {
     WhitespaceOnly,
     // Custom(T),
 }
 
-impl Normalizer{
-    pub fn into_strategy(&self) -> impl Normalize{
-        match &self{
-            Normalizer::WhitespaceOnly => DefaultNormalizer
+impl Normalizer {
+    pub fn into_strategy(&self) -> Box<dyn Normalize + Send + Sync> {
+        match &self {
+            Normalizer::WhitespaceOnly => Box::new(DefaultNormalizer),
         }
     }
 }
 
-impl Default for Normalizer{
+impl Default for Normalizer {
     fn default() -> Self {
         Normalizer::WhitespaceOnly
     }
 }
-

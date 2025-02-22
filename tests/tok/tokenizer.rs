@@ -1,3 +1,4 @@
+use rstest::*;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
 use toktokenizer::{
     config::TokenizerConfig, preproc::{DefaultNormalizer, Normalize}, BPETokenizer, Tokenizer
@@ -5,18 +6,13 @@ use toktokenizer::{
 
 use crate::helpers::{get_corpus, get_sentence};
 
-#[test]
-fn test_encode_decode() {
+#[fixture]
+#[once]
+fn tokenizer() -> BPETokenizer{
     let config = TokenizerConfig::new(42, None);
     let mut tok = BPETokenizer::new(config);
-
     tok.train(&get_corpus());
-
-    let text = get_sentence();
-    let encoded = tok.encode(&text);
-
-    assert!(text.len() >= encoded.len(),);
-    assert_eq!(text, tok.decode(&encoded),);
+    tok
 }
 
 #[test]
@@ -28,6 +24,15 @@ fn test_train_works() {
 
     tok.train(&corpus);
     assert!(tok.len() == tok.config.vocab_size);
+}
+
+#[rstest]
+fn test_encode_decode(tokenizer: &BPETokenizer) {
+    let text = get_sentence();
+    let encoded = tokenizer.encode(&text);
+
+    assert!(text.len() >= encoded.len(),);
+    assert_eq!(text, tokenizer.decode(&encoded),);
 }
 
 #[test]
