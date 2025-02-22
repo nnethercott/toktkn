@@ -22,9 +22,6 @@ pub trait Tokenizer {
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
-//TODO: look up `enum_dispatch`
-//TODO: move normalizer into config
-
 pub struct BPETokenizer {
     pub encoder: FwdMap,
     pub decoder: RwLock<Option<BkwdMap>>, // thread-safe

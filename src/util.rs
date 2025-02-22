@@ -3,7 +3,7 @@ use std::{
     hash::BuildHasher,
 };
 
-/// replace `ngram`s in `tokens` with `replace`
+/// Replaces the sequence`ngram`s in `tokens` with new slice `replace`
 pub fn ngram_replace<T>(tokens: &mut Vec<T>, ngram: &[T], replace: &[T])
 where
     T: PartialEq + Copy,
@@ -27,7 +27,6 @@ where
             }
         });
 
-    // NOTE: from a leetcode (can't remember which)
     for i in remove.iter().rev() {
         *tokens = [&tokens[0..*i], replace, &tokens[*i + ngram.len()..]].concat();
     }
@@ -57,4 +56,19 @@ where
         let ngram: Vec<T> = word.chars().map(|c| T::from(c as u8)).collect();
         ngram_replace(tokens, &[t], &ngram);
     });
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    #[test]
+    fn replace_works(){
+        let mut v = vec![1,2,3,4,5,1,2,3];
+        let ngram = vec![1,2,3];
+        let replace = vec![6];
+
+        ngram_replace(&mut v, &ngram, &replace);
+        assert_eq!(v, vec![6,4,5,6]);
+    }
 }
