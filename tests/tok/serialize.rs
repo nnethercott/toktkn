@@ -27,7 +27,6 @@ fn test_serialize_config(tmpdir: &TempDir) -> std::io::Result<()> {
 }
 
 #[rstest]
-#[ignore]
 fn test_serialize_tokenizer(tmpdir: &TempDir, tokenizer: &BPETokenizer) -> std::io::Result<()> {
     // arrange
     let file_path = tmpdir.path().join("tokenizer.json");
@@ -38,6 +37,7 @@ fn test_serialize_tokenizer(tmpdir: &TempDir, tokenizer: &BPETokenizer) -> std::
 
     let new_tokenizer = BPETokenizer::from_pretrained(&file_path)?;
     assert_eq!(new_tokenizer.config.vocab_size, tokenizer.config.vocab_size);
+    assert_eq!(new_tokenizer.encoder, tokenizer.encoder);
 
     Ok(())
 }
