@@ -1,6 +1,7 @@
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use serde_with::{serde_as, DisplayFromStr};
 use std::error::Error;
 use std::io::Write;
 use std::sync::RwLock;
@@ -25,13 +26,15 @@ pub trait Tokenizer {
 }
 
 
+#[serde_as]
+#[derive(Serialize, Deserialize)]
 pub struct BPETokenizer {
+    #[serde_as(as = "Vec<((DisplayFromStr, DisplayFromStr), DisplayFromStr)>")]
     pub encoder: FwdMap,
+    #[serde(skip)]
     pub decoder: RwLock<Option<BkwdMap>>, // thread-safe
     pub config: TokenizerConfig,
-    preproc: Box<dyn Normalize+Send+Sync>,
 }
-
 
 impl Tokenizer for BPETokenizer {
     fn encode(&self, text: &str) -> Vec<Token> {
@@ -49,13 +52,10 @@ impl Tokenizer for BPETokenizer {
 
 impl BPETokenizer {
     pub fn new(config: TokenizerConfig) -> Self {
-        let preproc = config.preproc.into_strategy();
-
         Self {
             encoder: FwdMap::default(),
             decoder: RwLock::new(None),
             config,
-            preproc,
         }
     }
 
@@ -95,7 +95,8 @@ impl BPETokenizer {
     }
 
     pub fn preprocess(&self, text: &mut String) {
-        self.preproc.normalize(text);
+        let preproc = self.config.preproc.into_strategy();
+        preproc.normalize(text);
     }
 
     fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {

@@ -1,6 +1,6 @@
 use toktokenizer::{
     preproc::{DefaultNormalizer, Normalize},
-    Tokenizer, BPETokenizer
+    Tokenizer, BPETokenizer, Pretrained, config::TokenizerConfig
 };
 
 use fake::faker::lorem::en::{Paragraph, Sentence};
@@ -9,14 +9,14 @@ use fake::{Fake, Faker};
 //TODO: download wikitext
 
 fn main() {
-    let normalizer = DefaultNormalizer;
-    let mut tok = BPETokenizer::new(&normalizer);
+    let config = TokenizerConfig::new(42, None);
+    let mut tok = BPETokenizer::new(config);
 
     let corpus: String = Paragraph(100..101).fake();
 
-    tok.train(&corpus, 50);
+    tok.train(&corpus);
     println!("{}", tok.len());
 
-    tok.train(&corpus, 75);
-    println!("{}", tok.len());
+    // save 
+    tok.save_pretrained("tokenizer.json").expect("failed to save");
 }
