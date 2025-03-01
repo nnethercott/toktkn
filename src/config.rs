@@ -6,31 +6,9 @@ use std::fs::{read_to_string, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
-// NOTE: impl `Pretrained` for tokenizer?
+use crate::pretrained::Pretrained;
 
-pub trait Pretrained: Sized {
-    fn save_pretrained<P: AsRef<Path>>(&self, path: P) -> Result<(), std::io::Error>;
-    fn from_pretrained<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error>;
-}
-
-impl<T> Pretrained for T
-where
-    T: Serialize + for<'a> Deserialize<'a>,
-{
-    fn save_pretrained<P: AsRef<Path>>(&self, path: P) -> Result<(), std::io::Error> {
-        let file = File::create(path)?;
-        serde_json::to_writer(file, &self).expect("failed to save pretrained !");
-        Ok(())
-    }
-
-    fn from_pretrained<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
-        let s = read_to_string(path)?;
-        let config = serde_json::from_str::<Self>(&s).expect("failed to load pretrained");
-        Ok(config)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TokenizerConfig {
     pub vocab_size: usize,
     pub special_tokens_map: Option<VocabMap>,
@@ -54,32 +32,5 @@ impl TokenizerConfig {
             preproc,
             special_tokens_map: None,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    extern crate tempdir;
-    use tempdir::TempDir;
-
-    #[test]
-    fn test_serialize() -> std::io::Result<()> {
-        // arrange
-        let dir = TempDir::new("tmp_dir_for_configs")?;
-        let file_path = dir.path().join("config.txt");
-        let mut config = TokenizerConfig::new(42, None);
-
-        // act
-        config.save_pretrained(&file_path)?;
-        assert!(file_path.exists());
-
-        config = TokenizerConfig::from_pretrained(&file_path)?;
-        assert_eq!(config.vocab_size, 42);
-        assert_eq!(config.preproc, Normalizer::default());
-
-        dir.close()?;
-
-        Ok(())
     }
 }

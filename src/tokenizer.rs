@@ -1,4 +1,6 @@
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
+use serde::Serialize;
+use serde_json::json;
 use std::error::Error;
 use std::io::Write;
 use std::sync::RwLock;
@@ -8,7 +10,7 @@ use crate::config::TokenizerConfig;
 use crate::preproc::Normalize;
 use crate::util::{inject_special_tokens, ngram_replace, replace_special_tokens};
 
-use crate::config::Pretrained;
+use crate::pretrained::Pretrained;
 
 pub type Token = u32; // 2^32 - 1 max new tokens
 
@@ -22,12 +24,14 @@ pub trait Tokenizer {
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
+
 pub struct BPETokenizer {
     pub encoder: FwdMap,
     pub decoder: RwLock<Option<BkwdMap>>, // thread-safe
     pub config: TokenizerConfig,
     preproc: Box<dyn Normalize+Send+Sync>,
 }
+
 
 impl Tokenizer for BPETokenizer {
     fn encode(&self, text: &str) -> Vec<Token> {

@@ -27,7 +27,7 @@ impl Normalize for DefaultNormalizer {
 }
 
 // hack
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Normalizer {
     WhitespaceOnly,
 }

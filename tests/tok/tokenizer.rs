@@ -4,16 +4,8 @@ use toktokenizer::{
     config::TokenizerConfig, preproc::{DefaultNormalizer, Normalize}, BPETokenizer, Tokenizer
 };
 
-use crate::helpers::{get_corpus, get_sentence};
-
-#[fixture]
-#[once]
-fn tokenizer() -> BPETokenizer{
-    let config = TokenizerConfig::new(42, None);
-    let mut tok = BPETokenizer::new(config);
-    tok.train(&get_corpus());
-    tok
-}
+// use crate::helpers::{get_corpus, get_sentence};
+use crate::helpers::{get_corpus, get_sentence, tmpdir, tokenizer};
 
 #[test]
 fn test_train_works() {
