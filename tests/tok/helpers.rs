@@ -7,7 +7,7 @@ use toktokenizer::BPETokenizer;
 use uuid::Uuid;
 
 pub fn get_corpus() -> String {
-    let corpus: String = Paragraph(100..101).fake();
+    let corpus: String = Paragraph(100..201).fake();
     corpus
 }
 

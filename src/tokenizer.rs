@@ -39,35 +39,26 @@ pub struct BPETokenizer {
 impl Tokenizer for BPETokenizer {
     fn encode(&self, text: &str) -> Vec<Token> {
         // parallel
-        let first_pass: Vec<Token> = text
-            .as_bytes()
-            .par_chunks(1000)
+        text.as_bytes()
+            .par_chunks(500)
             .flat_map_iter(|c| {
                 let chunk_as_tokens: Vec<Token> = c.iter().map(|&i| i as Token).collect();
                 self._encode_chunk(&chunk_as_tokens)
             })
-            .collect();
-
-        // sequential cleanup
-        self._encode_chunk(&first_pass)
+            .collect()
     }
 
     fn decode(&self, input_ids: &[Token]) -> String {
         // first pass
-        let first_pass: Vec<Token> = input_ids
+        let raw_tokens: Vec<Token> = input_ids
             .par_chunks(1000)
             .flat_map_iter(|t| self._decode_chunk(t))
             .collect();
 
-        //second pass
-        let utf8 = self
-            ._decode_chunk(&first_pass)
-            .iter()
-            .map(|&i| i as u8)
-            .collect::<Vec<u8>>();
+        let bytes: Vec<u8> = raw_tokens.iter().map(|&t| t as u8).collect();
 
-        let s =
-            str::from_utf8(&utf8).expect(&format!("failed to decode into valid utf-8: {:?}", utf8));
+        let s = str::from_utf8(&bytes)
+            .expect(&format!("failed to decode into valid utf-8: {:?}", bytes));
         s.into()
     }
 }
