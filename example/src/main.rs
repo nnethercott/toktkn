@@ -6,6 +6,8 @@ use toktokenizer::{
 use fake::faker::lorem::en::{Paragraph, Sentence};
 use fake::{Fake, Faker};
 
+
+
 fn main() {
     let config = TokenizerConfig::new(42, None);
     let mut tok = BPETokenizer::new(config);

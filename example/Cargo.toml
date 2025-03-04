@@ -7,3 +7,6 @@ edition = "2021"
 fake = "2.9"
 toktokenizer = {path = "../"}
 
+[[bin]]
+name = "throughput"
+path = "src/bin/throughput.rs"
