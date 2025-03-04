@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -25,7 +26,6 @@ pub trait Tokenizer {
     fn decode(&self, input_ids: &[Token]) -> String;
 }
 
-
 #[serde_as]
 #[derive(Serialize, Deserialize)]
 pub struct BPETokenizer {
@@ -38,12 +38,34 @@ pub struct BPETokenizer {
 
 impl Tokenizer for BPETokenizer {
     fn encode(&self, text: &str) -> Vec<Token> {
-        let text = text.as_bytes();
-        self._encode_chunk(text)
+        // parallel
+        let first_pass: Vec<Token> = text
+            .as_bytes()
+            .par_chunks(1000)
+            .flat_map_iter(|c| {
+                let chunk_as_tokens: Vec<Token> = c.iter().map(|&i| i as Token).collect();
+                self._encode_chunk(&chunk_as_tokens)
+            })
+            .collect();
+
+        // sequential cleanup
+        self._encode_chunk(&first_pass)
     }
 
     fn decode(&self, input_ids: &[Token]) -> String {
-        let utf8: Vec<u8> = self._decode_chunk(input_ids);
+        // first pass
+        let first_pass: Vec<Token> = input_ids
+            .par_chunks(1000)
+            .flat_map_iter(|t| self._decode_chunk(t))
+            .collect();
+
+        //second pass
+        let utf8 = self
+            ._decode_chunk(&first_pass)
+            .iter()
+            .map(|&i| i as u8)
+            .collect::<Vec<u8>>();
+
         let s =
             str::from_utf8(&utf8).expect(&format!("failed to decode into valid utf-8: {:?}", utf8));
         s.into()
@@ -99,8 +121,9 @@ impl BPETokenizer {
         preproc.normalize(text);
     }
 
-    fn _encode_chunk(&self, chunk: &[u8]) -> Vec<Token> {
-        let mut tokens: Vec<Token> = chunk.to_vec().iter().map(|&x| x as Token).collect();
+    fn _encode_chunk(&self, chunk: &[Token]) -> Vec<Token> {
+        let mut tokens = chunk.to_vec().clone();
+
         if let Some(map) = self.config.special_tokens_map.as_ref() {
             replace_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
         }
@@ -154,15 +177,12 @@ impl BPETokenizer {
     }
 
     // TODO: custom errors ?
-    fn _decode_chunk(&self, tokens: &[Token]) -> Vec<u8> {
+    fn _decode_chunk(&self, tokens: &[Token]) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::from(tokens);
 
         // lazy init
         self._sync_decoder();
-        let lock = self
-            .decoder
-            .read()
-            .expect("could not acquire lock");
+        let lock = self.decoder.read().expect("could not acquire lock");
 
         let decoder = lock.as_ref().unwrap();
 
@@ -191,7 +211,7 @@ impl BPETokenizer {
             inject_special_tokens::<Token, FxBuildHasher>(&mut tokens, map);
         }
 
-        tokens.iter().map(|&x| x as u8).collect()
+        tokens
     }
 
     // TODO: optimize with multi processing and broadcast ?

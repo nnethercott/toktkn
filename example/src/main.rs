@@ -6,8 +6,6 @@ use toktokenizer::{
 use fake::faker::lorem::en::{Paragraph, Sentence};
 use fake::{Fake, Faker};
 
-//TODO: download wikitext
-
 fn main() {
     let config = TokenizerConfig::new(42, None);
     let mut tok = BPETokenizer::new(config);

@@ -9,8 +9,6 @@ use std::fs::{read_to_string, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
-//  TODO: read into `serde_with`, `serde_as`
-
 pub trait Pretrained: Sized {
     fn save_pretrained<P: AsRef<Path>>(&self, path: P) -> Result<(), std::io::Error>;
     fn from_pretrained<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error>;

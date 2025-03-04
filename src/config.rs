@@ -16,8 +16,6 @@ pub struct TokenizerConfig {
     pub preproc: Normalizer,
 }
 
-//TODO: more methods to add special tokens ?
-
 impl TokenizerConfig {
     pub fn new(vocab_size: usize, preproc: Option<Normalizer>) -> Self {
         assert!(vocab_size > 0, "can't train on vocab_size <= 0!");
