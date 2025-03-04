@@ -32,7 +32,7 @@ pub struct BPETokenizer {
     #[serde_as(as = "Vec<((DisplayFromStr, DisplayFromStr), DisplayFromStr)>")]
     pub encoder: FwdMap,
     #[serde(skip)]
-    pub decoder: RwLock<Option<BkwdMap>>, // thread-safe
+    pub decoder: RwLock<Option<BkwdMap>>, // thread-safe & nullable
     pub config: TokenizerConfig,
 }
 
