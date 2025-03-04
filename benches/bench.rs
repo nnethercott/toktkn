@@ -2,8 +2,6 @@
 // Nice blog post on the subject :
 // https://seenaburns.com/benchmarking-rust-with-cargo-bench/
 
-use fake::faker::lorem::en::{Paragraph, Sentence};
-use fake::{Fake, Faker};
 use toktokenizer::{config::*, BPETokenizer, Tokenizer};
 
 extern crate test;
