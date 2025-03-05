@@ -28,7 +28,9 @@ impl Normalize for DefaultNormalizer {
 
 // hack
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Default)]
 pub enum Normalizer {
+    #[default]
     WhitespaceOnly,
 }
 
@@ -40,8 +42,3 @@ impl Normalizer {
     }
 }
 
-impl Default for Normalizer {
-    fn default() -> Self {
-        Normalizer::WhitespaceOnly
-    }
-}

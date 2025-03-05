@@ -1,5 +1,5 @@
 use fake::faker::lorem::en::{Paragraph, Sentence};
-use fake::{Fake, Faker};
+use fake::Fake;
 use rstest::fixture;
 use tempdir::TempDir;
 use toktokenizer::config::TokenizerConfig;

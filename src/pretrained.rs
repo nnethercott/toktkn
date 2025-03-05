@@ -1,12 +1,8 @@
 use crate::config::TokenizerConfig;
-use crate::preproc::{DefaultNormalizer, Normalize, Normalizer};
-use crate::tokenizer::VocabMap;
-use crate::{BPETokenizer, FwdMap};
+use crate::FwdMap;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 use serde_with::{serde_as, DisplayFromStr};
 use std::fs::{read_to_string, File};
-use std::io::{Read, Write};
 use std::path::Path;
 
 pub trait Pretrained: Sized {

@@ -1,7 +1,6 @@
 use super::*;
 extern crate tempdir;
 use tempdir::TempDir;
-use uuid::Uuid;
 use rstest::*;
 
 use toktokenizer::{config::TokenizerConfig, preproc::Normalizer, BPETokenizer, Pretrained};

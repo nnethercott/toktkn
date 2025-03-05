@@ -23,7 +23,7 @@ mod tests {
 
     #[bench]
     fn bench_tokenizer(b: &mut Bencher) {
-        let mut tokenizer = get_tokenizer();
+        let tokenizer = get_tokenizer();
 
         b.iter(|| tokenizer.encode(SAMPLE));
     }

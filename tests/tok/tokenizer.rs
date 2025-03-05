@@ -1,11 +1,11 @@
 use rstest::*;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
+use rustc_hash::FxHashMap;
 use toktokenizer::{
-    config::TokenizerConfig, preproc::{DefaultNormalizer, Normalize}, BPETokenizer, Tokenizer
+    config::TokenizerConfig, BPETokenizer, Tokenizer
 };
 
 // use crate::helpers::{get_corpus, get_sentence};
-use crate::helpers::{get_corpus, get_sentence, tmpdir, tokenizer};
+use crate::helpers::{get_corpus, get_sentence, tokenizer};
 
 #[test]
 fn test_train_works() {
@@ -65,7 +65,6 @@ fn test_special_tokens_doesnt_break_encoding() {
 
     let corpus = get_corpus();
     tok.train(&corpus);
-    let special_tokens = vec!["<nate>"];
 
     let mut sample = String::from("hello hello world <s></s> some more text goes here");
     sample += &get_sentence();

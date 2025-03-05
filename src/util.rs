@@ -1,5 +1,5 @@
 use std::{
-    collections::hash_map::{HashMap, RandomState},
+    collections::hash_map::HashMap,
     hash::BuildHasher,
 };
 
@@ -20,10 +20,7 @@ where
                 prev_stack = ngram.len() - 1;
             } else {
                 // so no match can occur in overlapping window
-                prev_stack = match prev_stack.checked_sub(1) {
-                    Some(num) => num,
-                    _ => 0,
-                };
+                prev_stack = prev_stack.checked_sub(1).unwrap_or_default();
             }
         });
 

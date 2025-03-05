@@ -1,18 +1,13 @@
 use rayon::prelude::*;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHasher};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serde_with::{serde_as, DisplayFromStr};
-use std::error::Error;
-use std::io::Write;
 use std::sync::RwLock;
-use std::{fs, str};
+use std::str;
 
 use crate::config::TokenizerConfig;
-use crate::preproc::Normalize;
 use crate::util::{inject_special_tokens, ngram_replace, replace_special_tokens};
 
-use crate::pretrained::Pretrained;
 
 pub type Token = u32; // 2^32 - 1 max new tokens
 
@@ -58,7 +53,7 @@ impl Tokenizer for BPETokenizer {
         let bytes: Vec<u8> = raw_tokens.iter().map(|&t| t as u8).collect();
 
         let s = str::from_utf8(&bytes)
-            .expect(&format!("failed to decode into valid utf-8: {:?}", bytes));
+            .unwrap_or_else(|_| panic!("failed to decode into valid utf-8: {:?}", bytes));
         s.into()
     }
 }
@@ -102,7 +97,7 @@ impl BPETokenizer {
                 .special_tokens_map
                 .take()
                 .map_or(Some(token_map.clone()), |mut m| {
-                    m.extend(token_map.into_iter());
+                    m.extend(token_map);
                     Some(m)
                 });
     }
