@@ -1,6 +1,6 @@
 use rstest::*;
 use rustc_hash::FxHashMap;
-use toktokenizer::{
+use toktkn::{
     config::TokenizerConfig, BPETokenizer, Tokenizer
 };
 

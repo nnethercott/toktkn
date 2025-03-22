@@ -3,7 +3,7 @@ extern crate tempdir;
 use tempdir::TempDir;
 use rstest::*;
 
-use toktokenizer::{config::TokenizerConfig, preproc::Normalizer, BPETokenizer, Pretrained};
+use toktkn::{config::TokenizerConfig, preproc::Normalizer, BPETokenizer, Pretrained};
 
 // some test helpers
 use helpers::{tmpdir, tokenizer};

@@ -35,7 +35,7 @@ impl Tokenizer for BPETokenizer {
     fn encode(&self, text: &str) -> Vec<Token> {
         // parallel
         text.as_bytes()
-            .par_chunks(500)
+            .par_chunks(1024)
             .flat_map_iter(|c| {
                 let chunk_as_tokens: Vec<Token> = c.iter().map(|&i| i as Token).collect();
                 self._encode_chunk(&chunk_as_tokens)
@@ -46,7 +46,7 @@ impl Tokenizer for BPETokenizer {
     fn decode(&self, input_ids: &[Token]) -> String {
         // first pass
         let raw_tokens: Vec<Token> = input_ids
-            .par_chunks(1000)
+            .par_chunks(1024)
             .flat_map_iter(|t| self._decode_chunk(t))
             .collect();
 

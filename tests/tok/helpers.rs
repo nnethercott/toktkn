@@ -2,8 +2,7 @@ use fake::faker::lorem::en::{Paragraph, Sentence};
 use fake::Fake;
 use rstest::fixture;
 use tempdir::TempDir;
-use toktokenizer::config::TokenizerConfig;
-use toktokenizer::BPETokenizer;
+use toktkn::{config::TokenizerConfig, BPETokenizer};
 use uuid::Uuid;
 
 pub fn get_corpus() -> String {

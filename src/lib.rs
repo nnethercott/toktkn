@@ -1,8 +1,14 @@
-pub mod preproc;
-pub mod tokenizer;
+// modules
 pub mod config;
+pub mod preproc;
 pub mod pretrained;
+pub mod tokenizer;
+
+pub mod bindings;
+
 mod util;
 
-pub use tokenizer::*;
+// re-exports
 pub use pretrained::Pretrained;
+pub use config::TokenizerConfig;
+pub use tokenizer::*;

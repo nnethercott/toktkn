@@ -1,10 +1,11 @@
 [package]
-name = "toktokenizer"
-version = "0.1.2"
+name = "toktkn"
+version = "0.0.1"
 edition = "2021"
 
 [lib]
-name = "toktokenizer"
+name = "toktkn"
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 serde_json = "1.0.117"
@@ -14,8 +15,16 @@ tqdm = "0.7.0"
 serde_with = "3.12.0"
 rayon = "1.10.0"
 
+[dependencies.pyo3]
+version = "0.24.0"
+features = ["abi3-py310", "multiple-pymethods"]
+
 [dev-dependencies]
 fake = "3.1.0"
 rstest = "0.24.0"
 tempdir = "0.3.7"
 uuid = { version = "1.15.1", features = ["v4"] }
+
+# faster compile
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
