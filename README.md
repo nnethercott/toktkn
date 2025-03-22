@@ -22,6 +22,8 @@ bpe = BPETokenizer.from_pretrained("tokenizer.json")
 assert(len(bpe)==10)
 ```
 
+# Install 
+
 Install `toktkn` from PyPI with the following
 
 ```
