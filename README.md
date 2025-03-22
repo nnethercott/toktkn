@@ -1,45 +1,35 @@
-# 🪙 toktokenizer
+# 🪙 toktkn
 
-toktokenizer is a [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokenizer implemented in rust and exposed in python using [pyo3](https://github.com/PyO3/pyo3) bindings.
-
-```python
-from toktokenizer import BPETokenizer
-bpe = BPETokenizer.from_pretrained("wikibpe.json")
-
-msg = "rust is pretty fun 🦀"
-assert bpe.decode(bpe.encode(msg)) == msg
-```
-
-Install `toktokenizer` from PyPI with the following
-
-```
-pip install toktokenizer
-```
-
-**Note:** if you want to build from source make sure rust is installed!
-
-The only class `toktokenizer` exposes is `BPETokenizer`. The class itself is pretty minimalistic, with all major methods being showed below:
+toktkn is a [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokenizer implemented in rust and exposed in python using [pyo3](https://github.com/PyO3/pyo3) bindings.
 
 ```python
-from toktokenizer import BPETokenizer
+from toktkn import BPETokenizer, TokenizerConfig
 
-bpe = BPETokenizer()
+# create new tokenizer
+config = TokenizerConfig(vocab_size: 10)
+bpe = BPETokenizer(config)
 
-# train a byte-pair tokenizer on some corpus
-train_corpus = "this is some training data. any dumped string will do!"
-vocab_size = 8
-bpe.train(train_corpus, vocab_size)
+# build encoding rules on some corpus
+bpe.train("some really interesting training data here...")
+text = "rust is pretty fun 🦀"
 
-# save tokenizer state
-bpe.save_encoder("8word.json")
+assert bpe.decode(bpe.encode(text)) == text
 
-# load tokenizer from dumped file
-bpe.load_encoder("8word.json")
-
-# encode and decode
-input_ids = bpe.encode("some data")
-decoded = bpe.decode(input_ids)
+# serialize to disk
+bpe.save_pretrained("tokenizer.json")
+del(bpe)
+bpe = BPETokenizer.from_pretrained("tokenizer.json")
+assert(len(bpe)==10)
 ```
+
+Install `toktkn` from PyPI with the following
+
+```
+pip install toktkn
+```
+
+**Note:** if you want to build from source make sure cargo is installed!
+
 
 # Performance
 

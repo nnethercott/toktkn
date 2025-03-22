@@ -10,4 +10,5 @@ mod util;
 
 // re-exports
 pub use pretrained::Pretrained;
+pub use config::TokenizerConfig;
 pub use tokenizer::*;

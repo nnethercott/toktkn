@@ -1,5 +1,5 @@
 use std::time::Instant;
-use toktokenizer::*;
+use toktkn::*;
 
 const TEXT: &'static str = include_str!("../../../benches/corpus.txt");
 

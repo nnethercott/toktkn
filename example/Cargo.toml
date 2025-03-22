@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fake = "2.9"
-toktokenizer = {path = "../"}
+toktkn = {path = "../"}
 
 [[bin]]
 name = "throughput"

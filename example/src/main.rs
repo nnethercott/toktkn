@@ -1,22 +1,23 @@
-use toktokenizer::{
-    preproc::{DefaultNormalizer, Normalize},
-    Tokenizer, BPETokenizer, Pretrained, config::TokenizerConfig
-};
-
-use fake::faker::lorem::en::{Paragraph, Sentence};
-use fake::{Fake, Faker};
-
-
+use toktkn::{BPETokenizer, Pretrained, Tokenizer, TokenizerConfig};
 
 fn main() {
-    let config = TokenizerConfig::new(1000, None);
+    let config = TokenizerConfig::new(10, None);
     let mut tok = BPETokenizer::new(config);
 
-    let corpus: String = Paragraph(3000..3001).fake();
+    let corpus: String = "this is ideally some useful text used to train your tokenizer".into();
 
     tok.train(&corpus);
-    println!("{}", tok.len());
+    assert_eq!(tok.len(), 10);
 
-    // save 
-    tok.save_pretrained("tokenizer.json").expect("failed to save");
+    let test_sentence = "testing testing 123".to_string();
+    assert_eq!(tok.decode(&tok.encode(&test_sentence)), test_sentence);
+
+    // save to disk
+    tok.save_pretrained("tokenizer.json")
+        .expect("failed to save tokenizer!");
+
+    // ... and load
+    let new_tok =
+        BPETokenizer::from_pretrained("tokenizer.json").expect("failed to load tokenizer");
+    assert_eq!(new_tok.len(), tok.len());
 }
