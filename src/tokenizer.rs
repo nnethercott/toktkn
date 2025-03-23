@@ -162,7 +162,6 @@ impl BPETokenizer {
         tokens
     }
 
-    // TODO: custom errors ?
     fn _decode_chunk(&self, tokens: &[Token]) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::from(tokens);
 
@@ -200,7 +199,6 @@ impl BPETokenizer {
         tokens
     }
 
-    // TODO: optimize with multi processing and broadcast ?
     pub fn train(&mut self, text: &str) -> Vec<Token> {
         let mut pieces: Vec<Token>;
 

@@ -26,33 +26,3 @@ where
         Ok(config)
     }
 }
-
-#[serde_as]
-#[derive(Serialize, Deserialize)]
-struct HashMapWrapper{ 
-    #[serde_as(as = "Vec<((DisplayFromStr, DisplayFromStr), DisplayFromStr)>")]
-    encoder: FwdMap
-}
-
-#[derive(Serialize, Deserialize)]
-struct BPETokenizerWrapper {
-    config: TokenizerConfig,
-    encoder: HashMapWrapper,
-}
-
-// impl Pretrained for BPETokenizer {
-//     fn save_pretrained<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), std::io::Error> {
-//         let wrapper = BPETokenizerWrapper {
-//             config: self.config.clone(),
-//             encoder: HashMapWrapper{encoder: self.encoder.clone()}
-//         };
-//         wrapper.save_pretrained(path)
-//     }
-//
-//     fn from_pretrained<P: AsRef<std::path::Path>>(path: P) -> Result<Self, std::io::Error> {
-//         let wrapper = BPETokenizerWrapper::from_pretrained(path)?;
-//         let mut tokenizer = BPETokenizer::new(wrapper.config);
-//         tokenizer.encoder = wrapper.encoder.encoder;
-//         Ok(tokenizer)
-//     }
-// }

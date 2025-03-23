@@ -1,7 +1,5 @@
 use pyo3::prelude::*;
 
-//TODO: write macro for default wrapper impl ?
-
 #[pymodule]
 #[pyo3(name = "toktkn")]
 mod tkn {
