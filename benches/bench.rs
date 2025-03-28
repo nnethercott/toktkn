@@ -2,7 +2,7 @@
 // Nice blog post on the subject :
 // https://seenaburns.com/benchmarking-rust-with-cargo-bench/
 
-use tkn::{config::*, BPETokenizer, Tokenizer};
+use toktkn::{config::*, BPETokenizer, Tokenizer};
 
 extern crate test;
 

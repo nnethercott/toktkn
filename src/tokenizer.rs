@@ -218,7 +218,7 @@ impl BPETokenizer {
                         *counts.entry((pieces[i], pieces[i + 1])).or_insert(0) += 1;
                     }
 
-                    let (&p, _) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
+                    let (&p, _) = counts.iter().max_by_key(|&(_, &c)| c).unwrap();
                     let token_id = (self.len() + 127 + 1) as Token;
 
                     self.encoder.insert(p, token_id);
