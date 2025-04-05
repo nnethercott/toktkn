@@ -1,13 +1,13 @@
 [package]
 name = "toktkn"
-version = "0.0.1"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "a minimal byte-pair encoding tokenizer implementation"
 repository = "https://github.com/nnethercott/toktkn"
 homepage = "https://github.com/nnethercott/toktkn"
 readme = "README.md"
-keywords = ["ML", "python", "maturin", "pyo3"]
+keywords = ["nlp", "python", "maturin", "pyo3"]
 
 exclude = [
   "benches/*",

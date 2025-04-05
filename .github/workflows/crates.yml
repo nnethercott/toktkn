@@ -1,0 +1,22 @@
+name: cratesio
+on:
+  push:
+    tags:
+      - '*'
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: cargo release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+    env: 
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup uptestdate ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - run: cargo publish
