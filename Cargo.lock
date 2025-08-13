@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "toktkn"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "fake",
  "pyo3",
